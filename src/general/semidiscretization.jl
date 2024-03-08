@@ -671,10 +671,11 @@ function check_configuration(system::TotalLagrangianSPHSystem, systems)
     end
 end
 
-function check_configuration(system::WeaklyCompressibleSPHSystem, systems)
+function check_configuration(system::FluidSystem, systems)
     (; viscosity) = system
 
-    if viscosity isa ArtificialViscosityMonaghan && system.transport_velocity isa TransportVelocityAdami
+    if viscosity isa ArtificialViscosityMonaghan &&
+       system.transport_velocity isa TransportVelocityAdami
         throw(ArgumentError("Please use `ViscosityAdami` when simulating with `TransportVelocityAdami`"))
     end
 end
