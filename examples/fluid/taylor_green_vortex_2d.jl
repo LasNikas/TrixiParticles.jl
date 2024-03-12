@@ -77,7 +77,6 @@ if wcsph
     fluid_system = WeaklyCompressibleSPHSystem(fluid, density_calculator,
                                                state_equation, smoothing_kernel,
                                                smoothing_length; viscosity,
-                                               pressure_acceleration=TrixiParticles.inter_particle_averaged_pressure,
                                                transport_velocity)
 else
     state_equation = nothing
@@ -148,12 +147,26 @@ function diff_p_loc_p_avg(v, u, t, system)
 end
 
 info_callback = InfoCallback(interval=100)
+
+solver = wcsph ? "wcsph" : "edac"
+tvf = TVF ? "_tvf" : ""
+dc = density_calculator == SummationDensity() ? "_summation_density" : "_continuity_density"
+
+name_out = "out_tgv/" * solver * tvf * dc * "_nx_$(n_particles_xy)_re_$(Int(reynolds_number))"
+
 saving_callback = SolutionSavingCallback(dt=0.02,
                                          L1v=compute_L1v_error,
                                          L1p=compute_L1p_error,
-                                         diff_p_loc_p_avg=diff_p_loc_p_avg)
+                                         diff_p_loc_p_avg=diff_p_loc_p_avg,
+                                         output_directory=name_out)
 
-callbacks = CallbackSet(info_callback, saving_callback, UpdateCallback(update=TVF))
+pp = PostprocessCallback(; dt=0.02, filename="errors",
+                         output_directory=name_out,
+                         L1v=compute_L1v_error,
+                         L1p=compute_L1p_error,
+                         write_file_interval=50)
+
+callbacks = CallbackSet(info_callback, saving_callback, UpdateCallback(update=TVF), pp)
 
 # Use a Runge-Kutta method with automatic (error based) time step size control.
 # Enable threading of the RK method for better performance on multiple threads.

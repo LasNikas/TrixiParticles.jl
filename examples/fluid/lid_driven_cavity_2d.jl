@@ -8,7 +8,8 @@
 using TrixiParticles
 using OrdinaryDiffEq
 
-wcsph = true
+wcsph = false
+TVF = false
 
 # ==========================================================================================
 # ==== Resolution
@@ -24,6 +25,8 @@ tspan = (0.0, 30.0)
 reynolds_number = 100.0
 
 cavity_size = (1.0, 1.0)
+
+nx = round(Int, cavity_size[1] / particle_spacing)
 
 fluid_density = 1.0
 
@@ -52,13 +55,15 @@ smoothing_kernel = SchoenbergQuinticSplineKernel{2}()
 
 density_calculator = SummationDensity()
 
+transport_velocity = TVF ? TransportVelocityAdami(pressure) : nothing
+
 if wcsph
     state_equation = StateEquationCole(; sound_speed, reference_density=fluid_density,
                                        exponent=1)
     fluid_system = WeaklyCompressibleSPHSystem(cavity.fluid, density_calculator,
                                                state_equation, smoothing_kernel,
-                                               smoothing_length, viscosity=viscosity,
-                                               transport_velocity=TransportVelocityAdami(pressure))
+                                               smoothing_length; viscosity=viscosity,
+                                               transport_velocity)
 else
     state_equation = nothing
     pressure_acceleration = TrixiParticles.inter_particle_averaged_pressure
@@ -67,7 +72,7 @@ else
                                                pressure_acceleration,
                                                density_calculator=density_calculator,
                                                viscosity=viscosity,
-                                               transport_velocity=TransportVelocityAdami(pressure))
+                                               transport_velocity)
 end
 # ==========================================================================================
 # ==== Boundary
@@ -108,9 +113,19 @@ ode = semidiscretize(semi, tspan)
 
 info_callback = InfoCallback(interval=100)
 
-saving_callback = SolutionSavingCallback(dt=0.02, prefix="", ekin=kinetic_energy)
+solver = wcsph ? "wcsph" : "edac"
+tvf = TVF ? "_tvf" : ""
+dc = density_calculator == SummationDensity() ? "_summation_density" : "_continuity_density"
+
+name_out = "out_ldc/"*solver*tvf*dc*"_nx_$(nx)_re_$(Int(reynolds_number))"
+
+saving_callback = SolutionSavingCallback(dt=0.02, prefix="", ekin=kinetic_energy,
+                                         output_directory=name_out)
+
 steady_state = SteadyStateCallback(abstol=1e-8, reltol=1e-6, interval_size=1000)
-callbacks = CallbackSet(info_callback, saving_callback, UpdateCallback(), steady_state)
+
+callbacks = CallbackSet(info_callback, saving_callback, UpdateCallback(update=TVF),
+                        steady_state)
 
 # Use a Runge-Kutta method with automatic (error based) time step size control.
 # Enable threading of the RK method for better performance on multiple threads.
