@@ -46,7 +46,7 @@ function Base.show(io::IO, ::MIME"text/plain",
         setup = [
             "absolute tolerance" => steady_state_callback.abstol,
             "relative tolerance" => steady_state_callback.reltol,
-            "interval size" => steady_state_callback.interval_size
+            "interval size" => steady_state_callback.interval_size,
         ]
         summary_box(io, "SteadyStateCallback", setup)
     end

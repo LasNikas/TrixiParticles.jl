@@ -20,7 +20,7 @@ spacing_ratio = 1
 
 # ==========================================================================================
 # ==== Experiment Setup
-tspan = (0.0, 5.0)
+tspan = (0.0, 30.0)
 reynolds_number = 100.0
 
 cavity_size = (1.0, 1.0)
@@ -30,7 +30,7 @@ fluid_density = 1.0
 const velocity_lid = 1.0
 sound_speed = 10 * velocity_lid
 
-viscosity = ViscosityAdami(; nu= velocity_lid / reynolds_number)
+viscosity = ViscosityAdami(; nu=velocity_lid / reynolds_number)
 
 pressure = sound_speed^2 * fluid_density
 
@@ -50,18 +50,23 @@ lid = RectangularShape(particle_spacing, (lid_length, 3),
 smoothing_length = 1.0 * particle_spacing
 smoothing_kernel = SchoenbergQuinticSplineKernel{2}()
 
+density_calculator = SummationDensity()
+
 if wcsph
     state_equation = StateEquationCole(; sound_speed, reference_density=fluid_density,
                                        exponent=1)
-    fluid_system = WeaklyCompressibleSPHSystem(cavity.fluid, ContinuityDensity(),
+    fluid_system = WeaklyCompressibleSPHSystem(cavity.fluid, density_calculator,
                                                state_equation, smoothing_kernel,
                                                smoothing_length, viscosity=viscosity,
                                                transport_velocity=TransportVelocityAdami(pressure))
 else
     state_equation = nothing
+    pressure_acceleration = TrixiParticles.inter_particle_averaged_pressure
     fluid_system = EntropicallyDampedSPHSystem(cavity.fluid, smoothing_kernel,
-                                               smoothing_length,
-                                               sound_speed, viscosity=viscosity,
+                                               smoothing_length, sound_speed;
+                                               pressure_acceleration,
+                                               density_calculator=density_calculator,
+                                               viscosity=viscosity,
                                                transport_velocity=TransportVelocityAdami(pressure))
 end
 # ==========================================================================================
@@ -103,8 +108,9 @@ ode = semidiscretize(semi, tspan)
 
 info_callback = InfoCallback(interval=100)
 
-saving_callback = SolutionSavingCallback(dt=0.02)
-callbacks = CallbackSet(info_callback, saving_callback, UpdateCallback())
+saving_callback = SolutionSavingCallback(dt=0.02, prefix="", ekin=kinetic_energy)
+steady_state = SteadyStateCallback(abstol=1e-8, reltol=1e-6, interval_size=1000)
+callbacks = CallbackSet(info_callback, saving_callback, UpdateCallback(), steady_state)
 
 # Use a Runge-Kutta method with automatic (error based) time step size control.
 # Enable threading of the RK method for better performance on multiple threads.

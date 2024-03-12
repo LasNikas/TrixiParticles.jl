@@ -9,6 +9,8 @@ using TrixiParticles
 using OrdinaryDiffEq
 
 TVF = true
+wcsph = true
+
 # ==========================================================================================
 # ==== Resolution
 particle_spacing = 0.02
@@ -53,11 +55,14 @@ n_particles_xy = round(Int, box_length / particle_spacing)
 # ==========================================================================================
 # ==== Fluid
 nu = U * box_length / reynolds_number
+viscosity = ViscosityAdami(; nu)
 
 background_pressure = sound_speed^2 * fluid_density
 
 smoothing_length = 1.0 * particle_spacing
 smoothing_kernel = SchoenbergQuinticSplineKernel{2}()
+
+density_calculator = SummationDensity()
 
 fluid = RectangularShape(particle_spacing, (n_particles_xy, n_particles_xy), (0.0, 0.0),
                          coordinates_perturbation=5, # Add small random displacement to the particles to avoid stagnant streamlines.
@@ -66,24 +71,30 @@ fluid = RectangularShape(particle_spacing, (n_particles_xy, n_particles_xy), (0.
 
 transport_velocity = TVF ? TransportVelocityAdami(background_pressure) : nothing
 
-fluid_system = EntropicallyDampedSPHSystem(fluid, smoothing_kernel, smoothing_length,
-                                           sound_speed,
-                                           pressure_acceleration=nothing,
-                                           #density_calculator=ContinuityDensity(),
-                                           transport_velocity=transport_velocity,
-                                           viscosity=ViscosityAdami(; nu))
-
+if wcsph
+    state_equation = StateEquationCole(; sound_speed, reference_density=fluid_density,
+                                       exponent=1)
+    fluid_system = WeaklyCompressibleSPHSystem(fluid, density_calculator,
+                                               state_equation, smoothing_kernel,
+                                               smoothing_length; viscosity,
+                                               pressure_acceleration=TrixiParticles.inter_particle_averaged_pressure,
+                                               transport_velocity)
+else
+    state_equation = nothing
+    pressure_acceleration = TrixiParticles.inter_particle_averaged_pressure
+    fluid_system = EntropicallyDampedSPHSystem(fluid, smoothing_kernel, smoothing_length,
+                                               sound_speed; pressure_acceleration,
+                                               density_calculato, transport_velocity,
+                                               viscosity)
+end
 # ==========================================================================================
 # ==== Simulation
 
 semi = Semidiscretization(fluid_system,
-                          neighborhood_search=GridNeighborhoodSearch,
                           periodic_box_min_corner=[0.0, 0.0],
                           periodic_box_max_corner=[box_length, box_length])
 
 ode = semidiscretize(semi, tspan)
-
-dt_max = min(smoothing_length / 4 * (sound_speed + U), smoothing_length^2 / (8 * nu))
 
 function compute_L1v_error(v, u, t, system)
     v_analytical_avg = 0.0
@@ -155,5 +166,5 @@ callbacks = CallbackSet(info_callback, saving_callback, UpdateCallback(update=TV
 sol = solve(ode, RDPK3SpFSAL49(),
             abstol=1e-8, # Default abstol is 1e-6 (may need to be tuned to prevent boundary penetration)
             reltol=1e-4, # Default reltol is 1e-3 (may need to be tuned to prevent boundary penetration)
-            dtmax=dt_max,#1e-2, # Limit stepsize to prevent crashing
+            dtmax=1e-2, # Limit stepsize to prevent crashing
             save_everystep=false, callback=callbacks);

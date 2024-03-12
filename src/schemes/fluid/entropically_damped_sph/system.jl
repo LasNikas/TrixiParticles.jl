@@ -128,6 +128,8 @@ function Base.show(io::IO, ::MIME"text/plain", system::EntropicallyDampedSPHSyst
         summary_line(io, "tansport velocity formulation",
                      system.transport_velocity |> typeof |> nameof)
         summary_line(io, "acceleration", system.acceleration)
+        summary_line(io, "pressure formulation",
+                     system.pressure_acceleration_formulation |> typeof |> nameof)
         summary_footer(io)
     end
 end
