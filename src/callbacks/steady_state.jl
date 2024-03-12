@@ -1,21 +1,26 @@
-# Inspired by [Trixi.jl](https://github.com/trixi-framework/Trixi.jl).
 """
-    SteadyStateCallback(; abstol=1.0e-8, reltol=1.0e-6)
+    SteadyStateCallback(; abstol=1.0e-8, reltol=1.0e-6, interval_size)
 
-Terminates the integration when the [`residual_steady_state(du, equations)`](@ref)
+Terminates the integration when the change of the kinetic energy in a specific interval
 falls below the threshold specified by `abstol, reltol`.
+
+# Keywords
+- `abstol`: Absolute tolerance
+- `reltol`: Relative tolerance
+- `interval_size`: Size of the interval in which the change of the kintetic energy is determined.
 """
-mutable struct SteadyStateCallback{RealT <: Real}
-    abstol::RealT
-    reltol::RealT
-    previous_ekin::Vector{Float64}
-    interval_size::Int
+mutable struct SteadyStateCallback{ELTYPE}
+    abstol        :: ELTYPE
+    reltol        :: ELTYPE
+    previous_ekin :: Vector{ELTYPE}
+    interval_size :: Int
 end
 
 function SteadyStateCallback(; abstol=1.0e-8, reltol=1.0e-6, interval_size::Integer=10)
     abstol, reltol = promote(abstol, reltol)
 
-    steady_state_callback = SteadyStateCallback(abstol, reltol, [Inf64], interval_size)
+    steady_state_callback = SteadyStateCallback{typeof(abstol)}(abstol, reltol, [Inf64],
+                                                                interval_size)
 
     DiscreteCallback(steady_state_callback, steady_state_callback,
                      save_positions=(false, false))
@@ -38,14 +43,32 @@ function Base.show(io::IO, ::MIME"text/plain",
     else
         steady_state_callback = cb.affect!
 
-        setup = ["absolute tolerance" => steady_state_callback.abstol,
-            "relative tolerance" => steady_state_callback.reltol]
+        setup = [
+            "absolute tolerance" => steady_state_callback.abstol,
+            "relative tolerance" => steady_state_callback.reltol,
+            "interval size" => steady_state_callback.interval_size
+        ]
         summary_box(io, "SteadyStateCallback", setup)
     end
 end
 
 # affect!
-(::SteadyStateCallback)(integrator) = terminate!(integrator)
+function (::SteadyStateCallback)(integrator)
+    println("─"^100)
+    println("TrixiParticles simulation reached steady state and finished.")
+    println("Final time: ", integrator.t, "  Time steps: ", integrator.stats.naccept,
+            " (accepted), ", integrator.iter, " (total)")
+    println("─"^100)
+    println()
+
+    # Print timer
+    TimerOutputs.complement!(timer())
+    print_timer(timer(), title="TrixiParticles.jl",
+                allocations=true, linechars=:unicode, compact=false)
+    println()
+
+    terminate!(integrator)
+end
 
 # the condition
 function (steady_state_callback::SteadyStateCallback)(vu_ode, t, integrator)
