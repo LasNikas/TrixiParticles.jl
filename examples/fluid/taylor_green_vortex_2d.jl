@@ -8,6 +8,7 @@
 using TrixiParticles
 using OrdinaryDiffEq
 
+TVF = true
 # ==========================================================================================
 # ==== Resolution
 particle_spacing = 0.02
@@ -59,17 +60,17 @@ smoothing_length = 1.0 * particle_spacing
 smoothing_kernel = SchoenbergQuinticSplineKernel{2}()
 
 fluid = RectangularShape(particle_spacing, (n_particles_xy, n_particles_xy), (0.0, 0.0),
+                         coordinates_perturbation=5, # Add small random displacement to the particles to avoid stagnant streamlines.
                          density=fluid_density, pressure=initial_pressure_function,
                          velocity=initial_velocity_function)
 
-# Add small random displacement to the particles to avoid stagnant streamlines.
-#seed!(42);
-#fluid.coordinates .+= rand((-particle_spacing / 5):1e-5:(particle_spacing / 5),
-#                           size(fluid.coordinates))
+transport_velocity = TVF ? TransportVelocityAdami(background_pressure) : nothing
 
 fluid_system = EntropicallyDampedSPHSystem(fluid, smoothing_kernel, smoothing_length,
                                            sound_speed,
-                                           transport_velocity=TransportVelocityAdami(background_pressure),
+                                           pressure_acceleration=nothing,
+                                           #density_calculator=ContinuityDensity(),
+                                           transport_velocity=transport_velocity,
                                            viscosity=ViscosityAdami(; nu))
 
 # ==========================================================================================
@@ -139,10 +140,9 @@ info_callback = InfoCallback(interval=100)
 saving_callback = SolutionSavingCallback(dt=0.02,
                                          L1v=compute_L1v_error,
                                          L1p=compute_L1p_error,
-                                         diff_p_loc_p_avg=diff_p_loc_p_avg,
-                                         t=time_vector)
+                                         diff_p_loc_p_avg=diff_p_loc_p_avg)
 
-callbacks = CallbackSet(info_callback, saving_callback, UpdateCallback())
+callbacks = CallbackSet(info_callback, saving_callback, UpdateCallback(update=TVF))
 
 # Use a Runge-Kutta method with automatic (error based) time step size control.
 # Enable threading of the RK method for better performance on multiple threads.

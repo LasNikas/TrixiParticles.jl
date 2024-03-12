@@ -64,6 +64,7 @@ InitialCondition{Float64}(0.1, [1.05 1.15 … 1.35 1.45; 2.05 2.05 … 2.35 2.35
 """
 function RectangularShape(particle_spacing, n_particles_per_dimension, min_coordinates;
                           velocity=zeros(length(n_particles_per_dimension)),
+                          coordinates_perturbation=nothing,
                           mass=nothing, density=nothing, pressure=0.0,
                           acceleration=nothing, state_equation=nothing,
                           tlsph=false, loop_order=nothing)
@@ -88,6 +89,12 @@ function RectangularShape(particle_spacing, n_particles_per_dimension, min_coord
     coordinates = rectangular_shape_coords(particle_spacing, n_particles_per_dimension,
                                            min_coordinates, tlsph=tlsph,
                                            loop_order=loop_order)
+
+    if !isnothing(coordinates_perturbation)
+        seed!(42)
+        amplitude = particle_spacing / coordinates_perturbation
+        coordinates .+= rand((-amplitude):1e-5:(amplitude), NDIMS, n_particles)
+    end
 
     # Allow zero acceleration with state equation, but interpret `nothing` acceleration
     # with state equation as a likely mistake.
