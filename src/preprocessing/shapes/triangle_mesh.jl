@@ -17,6 +17,7 @@ struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
 
         triangle_connectivity = decompose(TriangleFace{Int}, mesh)
 
+        # TODO: This function is way to slow for big input files
         point_per_edge_indices, edges_in_triangle = populate_edges(triangle_connectivity)
 
         face_vertices = [[fill(zero(ELTYPE), SVector{NDIMS}) for _ in 1:3]
