@@ -1,7 +1,9 @@
 struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
+    vertices       :: Vector{SVector{NDIMS, ELTYPE}}
     face_vertices  :: Vector{Vector{SVector{NDIMS, ELTYPE}}}
-    normals_vertex :: Vector{Vector{SVector{NDIMS, ELTYPE}}}
-    normals_edge   :: Vector{Vector{SVector{NDIMS, ELTYPE}}}
+    normals_vertex :: Vector{SVector{NDIMS, ELTYPE}}
+    normals_edge   :: Vector{SVector{NDIMS, ELTYPE}}
+    edges          :: Vector{SVector{2, Int}}
     normals_face   :: Vector{SVector{NDIMS, ELTYPE}}
     min_box        :: SVector{NDIMS, ELTYPE}
     max_box        :: SVector{NDIMS, ELTYPE}
@@ -15,95 +17,89 @@ struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
 
         ELTYPE = eltype(min_box)
 
-        triangle_connectivity = decompose(TriangleFace{Int}, mesh)
+        vertices = union(mesh.position)
 
-        # TODO: This function is way to slow for big input files
-        point_per_edge_indices, edges_in_triangle = populate_edges(triangle_connectivity)
+        face_vertices_ids = [SVector(0, 0, 0) for _ in 1:n_faces]
 
         face_vertices = [[fill(zero(ELTYPE), SVector{NDIMS}) for _ in 1:3]
                          for _ in 1:n_faces]
+
         normals_face = [fill(zero(ELTYPE), SVector{NDIMS}) for _ in 1:n_faces]
 
-        normals_edge = [fill(zero(ELTYPE), SVector{NDIMS}) for _ in 1:(3n_faces)]
-        normals_vertex = [fill(zero(ELTYPE), SVector{NDIMS}) for _ in 1:(3n_faces)]
+        edges = Vector{SVector{2, Int}}() # Store ids of vertices
+        normals_edge = Vector{SVector{NDIMS, ELTYPE}}()
+#=
+        for i in 1:n_faces
+            v1, v2, v3 = mesh[i]
+            vertex_id1 = findfirst(x -> isapprox(v1, x), vertices)
+            vertex_id2 = findfirst(x -> isapprox(v2, x), vertices)
+            vertex_id3 = findfirst(x -> isapprox(v3, x), vertices)
+
+            face_vertices_ids[i] = [vertex_id1, vertex_id2, vertex_id3]
+        end
+
+        not_hanging = union(stack(face_vertices_ids))
+
+        deleteat!(vertices, setdiff(1:length(vertices), not_hanging)) =#
+
+        normals_vertex = [fill(zero(ELTYPE), SVector{NDIMS}) for _ in 1:length(vertices)]
 
         for i in 1:n_faces
             v1, v2, v3 = mesh[i]
 
+            face_vertices[i] = [SVector(v1...), SVector(v2...), SVector(v3...)]
+
             # Calculate normals
             n = SVector(normalize(cross(v2 - v1, v3 - v1))...)
 
-            face_vertices[i] = [SVector(v1...), SVector(v2...), SVector(v3...)]
             normals_face[i] = n
 
-            # Compute edge and point pseudo-normals
-            # See Baerentzen and Aanaes (2002)
-            for edge_index in edges_in_triangle[i]
-                normals_edge[edge_index] += n
+            vertex_id1 = findfirst(x -> isapprox(v1, x), vertices)
+            vertex_id2 = findfirst(x -> isapprox(v2, x), vertices)
+            vertex_id3 = findfirst(x -> isapprox(v3, x), vertices)
+
+            face_vertices_ids[i] = [vertex_id1, vertex_id2, vertex_id3]
+
+            normals_vertex[vertex_id1] += n
+            normals_vertex[vertex_id2] += n
+            normals_vertex[vertex_id3] += n
+
+            edge_1 = SVector(vertex_id1, vertex_id2)
+            edge_1_ = SVector(vertex_id2, vertex_id1)
+            edge_2 = SVector(vertex_id2, vertex_id3)
+            edge_2_ = SVector(vertex_id3, vertex_id2)
+            edge_3 = SVector(vertex_id3, vertex_id1)
+            edge_3_ = SVector(vertex_id1, vertex_id3)
+
+            # 6 possible variations
+            edge_id1 = findfirst(x -> (edge_1 == x || edge_1_ == x), edges)
+            edge_id2 = findfirst(x -> (edge_2 == x || edge_2_ == x), edges)
+            edge_id3 = findfirst(x -> (edge_3 == x || edge_3_ == x), edges)
+
+            if isnothing(edge_id1)
+                push!(edges, edge_1)
+                push!(normals_edge, n)
+            else
+                normals_edge[edge_id1] += n
             end
-
-            angles = incident_angles(face_vertices[i])
-
-            j = 1
-            for vertex_index in triangle_connectivity[i]
-                normals_vertex[vertex_index] += angles[j] * n
-                j += 1
+            if isnothing(edge_id2)
+                push!(edges, edge_2)
+                push!(normals_edge, n)
+            else
+                normals_edge[edge_id2] += n
+            end
+            if isnothing(edge_id3)
+                push!(edges, edge_3)
+                push!(normals_edge, n)
+            else
+                normals_edge[edge_id3] += n
             end
         end
 
-        # Reshape
-        normals_edge_ = [normalize.(normals_edge[edges_in_triangle[i]]) for i in 1:n_faces]
-        normals_vertex_ = [normalize.(normals_vertex[edges_in_triangle[i]])
-                           for i in 1:n_faces]
-
-        return new{NDIMS, ELTYPE}(face_vertices, normals_vertex_, normals_edge_,
+        return new{NDIMS, ELTYPE}(vertices, face_vertices, normalize.(normals_vertex),
+                                  normalize.(normals_edge), edges,
                                   normals_face, min_box, max_box)
     end
 end
 
 @inline nfaces(mesh::TriangleMesh) = length(mesh.normals_face)
-
-# Copied from https://gitlab.emse.fr/pierrat/SignedDistanceField.jl/-/blob/master/src/meshutils.jl?ref_type=heads#L71
-# Generates edge connectivity from triangle connectivity
-function populate_edges(trisconn)
-    edges = Vector{Tuple{Int, Int}}()
-    edge_idx = 0
-    edges_in_tri = [[0, 0, 0] for _ in 1:length(trisconn)]
-
-    for (idx, t) in enumerate(trisconn)
-        for i in 1:3
-            pt1 = t[i]
-            pt2 = t[mod1(i + 1, 3)]
-
-            edge = (min(pt1, pt2), max(pt1, pt2))
-
-            edge_idx_a = findfirst(isequal(edge), edges)
-            if isnothing(edge_idx_a)
-                push!(edges, edge)
-                edge_idx = length(edges)
-            else
-                edge_idx = edge_idx_a
-            end
-
-            edges_in_tri[idx][i] = edge_idx
-        end
-    end
-
-    return edges, edges_in_tri
-end
-
-# Almost identical to https://gitlab.emse.fr/pierrat/SignedDistanceField.jl/-/blob/master/src/SignedDistanceField.jl?ref_type=heads#L15
-function incident_angles(triangle_points)
-    a = triangle_points[1]
-    b = triangle_points[2]
-    c = triangle_points[3]
-    sab = dot(b - a, b - a)
-    sbc = dot(b - c, b - c)
-    sac = dot(c - a, c - a)
-
-    alpha = acos(clamp((sab + sac - sbc) / (2 * sqrt(sab * sac)), -1, 1))
-    beta = acos(clamp((sbc + sab - sac) / (2 * sqrt(sbc * sab)), -1, 1))
-    gamma = acos(clamp((sac + sbc - sab) / (2 * sqrt(sac * sbc)), -1, 1))
-
-    return alpha, beta, gamma
-end
