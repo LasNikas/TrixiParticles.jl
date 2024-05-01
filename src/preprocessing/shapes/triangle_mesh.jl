@@ -1,4 +1,5 @@
 struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
+    vertices          :: Vector{SVector{NDIMS, ELTYPE}}
     face_vertices     :: Vector{Tuple{SVector{NDIMS, ELTYPE}, SVector{NDIMS, ELTYPE}, SVector{NDIMS, ELTYPE}}}
     face_vertices_ids :: Vector{NTuple{3, Int}}
     face_edges_ids    :: Vector{NTuple{3, Int}}
@@ -108,9 +109,9 @@ struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
 
         resize!(normals_edge, length(_edges))
 
-        return new{NDIMS, ELTYPE}(face_vertices, face_vertices_ids, face_edges_ids,
-                                  normalize.(normals_vertex), normalize.(normals_edge),
-                                  normals_face, min_box, max_box)
+        return new{NDIMS, ELTYPE}(vertices, face_vertices, face_vertices_ids,
+                                  face_edges_ids, normalize.(normals_vertex),
+                                  normalize.(normals_edge), normals_face, min_box, max_box)
     end
 end
 

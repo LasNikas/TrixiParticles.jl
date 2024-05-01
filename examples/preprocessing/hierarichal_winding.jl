@@ -18,7 +18,6 @@ edge_box = 3
 edge1 = shape.edge_vertices[edge_shape]
 edge2 = box.edge_vertices[edge_box]
 
-
 TrixiParticles.exterior_vertices(box, shape)
 
 dir = joinpath("Data", "stl-files", "examples")
