@@ -29,17 +29,16 @@ function hierarchical_winding(bounding_box, mesh, query_point)
     return winding_number_left + winding_number_right
 end
 
-function construct_hierarchy!(bounding_box, mesh, directed_edges, closing_vertex)
+function construct_hierarchy!(bounding_box, mesh, directed_edges)
     (; max_corner, min_corner, faces) = bounding_box
 
-    if length(faces) < 50
+    if length(faces) < 100
         bounding_box.is_leaf = true
 
         return bounding_box
     end
 
-    bounding_box.closing_faces = determine_exterior(mesh, faces, directed_edges,
-                                                    closing_vertex)
+    bounding_box.closing_faces = determine_exterior(mesh, faces, directed_edges)
 
     if length(bounding_box.closing_faces) >= length(faces)
         bounding_box.is_leaf = true
@@ -66,17 +65,19 @@ function construct_hierarchy!(bounding_box, mesh, directed_edges, closing_vertex
     bounding_box.left = bbox_left
     bounding_box.right = bbox_right
 
-    construct_hierarchy!(bbox_left, mesh, directed_edges, closing_vertex)
-    construct_hierarchy!(bbox_right, mesh, directed_edges, closing_vertex)
+    construct_hierarchy!(bbox_left, mesh, directed_edges)
+    construct_hierarchy!(bbox_right, mesh, directed_edges)
 
     return bounding_box
 end
 
 function determine_exterior(mesh::Shapes{3}, faces, count_directed_edge)
-    (; face_vertices_ids, face_edges_ids) = mesh
+    (; edge_vertices_ids, face_vertices_ids, face_edges_ids) = mesh
 
     count_directed_edge .= 0
 
+    # allotherfaces = setdiff(eachface(mesh), faces)
+
     for face in faces
         v1 = face_vertices_ids[face][1]
         v2 = face_vertices_ids[face][2]
@@ -86,82 +87,47 @@ function determine_exterior(mesh::Shapes{3}, faces, count_directed_edge)
         edge2 = face_edges_ids[face][2]
         edge3 = face_edges_ids[face][3]
 
-        # Keep track how many extra time each edge is seen
-        # in the forward (`1`) and backward direction (`-1`)
-        count_directed_edge[edge1] += v1 < v2 ? 1 : -1
-        count_directed_edge[edge2] += v2 < v3 ? 1 : -1
-        count_directed_edge[edge3] += v3 < v1 ? 1 : -1
+        if edge_vertices_ids[edge1] == (v1, v2)
+            count_directed_edge[edge1] += 1
+        else
+            count_directed_edge[edge1] -= 1
+        end
+        if edge_vertices_ids[edge2] == (v2, v3)
+            count_directed_edge[edge2] += 1
+        else
+            count_directed_edge[edge2] -= 1
+        end
+        if edge_vertices_ids[edge3] == (v3, v1)
+            count_directed_edge[edge3] += 1
+        else
+            count_directed_edge[edge3] -= 1
+        end
     end
 
+    closing_edges = findall(!iszero, count_directed_edge)
     closing_faces = Vector{Tuple{Int, Int, Int}}()
-    closing_vertex = nothing
 
-    # Determine vertex which defines an interior face
-    for face in faces
-        v1 = face_vertices_ids[face][1]
-
-        edge1 = face_edges_ids[face][1]
-        edge2 = face_edges_ids[face][2]
-        edge3 = face_edges_ids[face][3]
-
-        if count_directed_edge[edge1] == 0 &&
-           count_directed_edge[edge2] == 0 &&
-           count_directed_edge[edge3] == 0
-
-            # Arbitrary vertex which lies on an interior face
-            closing_vertex = v1
-
-            break
-        end
+    if !isempty(closing_edges)
+        closing_vertex = edge_vertices_ids[closing_edges[1]][2]
+    else
+        closing_vertex = nothing
     end
 
-    for face in faces
-        v1 = face_vertices_ids[face][1]
-        v2 = face_vertices_ids[face][2]
-        v3 = face_vertices_ids[face][3]
+    for edge in closing_edges
+        v1 = edge_vertices_ids[edge][1]
+        v2 = edge_vertices_ids[edge][2]
 
-        edge1 = face_edges_ids[face][1]
-        edge2 = face_edges_ids[face][2]
-        edge3 = face_edges_ids[face][3]
-
-        if count_directed_edge[edge1] != 0
-            # `edge1` is an exterior edge
-            if count_directed_edge[edge1] > 0
-                # These triangles are repeated |count| times to account for possible
-                # multiple coverage of the same exterior edge.
-                @inbounds for _ in 1:abs(count_directed_edge[edge1])
-                    push!(closing_faces, (v1, v2, closing_vertex))
-                end
-            else
-                @inbounds for _ in 1:abs(count_directed_edge[edge1])
-                    push!(closing_faces, (v2, v1, closing_vertex))
-                end
-            end
+        if v1 == closing_vertex || v2 == closing_vertex
+            continue
         end
 
-        if count_directed_edge[edge2] != 0
-            # `edge2` is an exterior edge
-            if count_directed_edge[edge2] > 0
-                @inbounds for _ in 1:abs(count_directed_edge[edge2])
-                    push!(closing_faces, (v2, v3, closing_vertex))
-                end
-            else
-                @inbounds for _ in 1:abs(count_directed_edge[edge2])
-                    push!(closing_faces, (v3, v2, closing_vertex))
-                end
+        if count_directed_edge[edge] < 0
+            @inbounds for _ in 1:abs(count_directed_edge[edge])
+                push!(closing_faces, (v1, v2, closing_vertex))
             end
-        end
-
-        if count_directed_edge[edge3] != 0
-            # `edge3` is an exterior edge
-            if count_directed_edge[edge3] > 0
-                @inbounds for _ in 1:abs(count_directed_edge[edge3])
-                    push!(closing_faces, (v3, v1, closing_vertex))
-                end
-            else
-                @inbounds for _ in 1:abs(count_directed_edge[edge3])
-                    push!(closing_faces, (v1, v3, closing_vertex))
-                end
+        elseif count_directed_edge[edge] > 0
+            @inbounds for _ in 1:abs(count_directed_edge[edge])
+                push!(closing_faces, (v2, v1, closing_vertex))
             end
         end
     end

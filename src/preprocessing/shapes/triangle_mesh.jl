@@ -3,6 +3,7 @@ struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
     face_vertices     :: Vector{Tuple{SVector{NDIMS, ELTYPE}, SVector{NDIMS, ELTYPE}, SVector{NDIMS, ELTYPE}}}
     face_vertices_ids :: Vector{NTuple{3, Int}}
     face_edges_ids    :: Vector{NTuple{3, Int}}
+    edge_vertices_ids :: Vector{NTuple{2, Int}}
     normals_vertex    :: Vector{SVector{NDIMS, ELTYPE}}
     normals_edge      :: Vector{SVector{NDIMS, ELTYPE}}
     normals_face      :: Vector{SVector{NDIMS, ELTYPE}}
@@ -49,6 +50,7 @@ struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
 
         _edges = Dict{NTuple{2, Int}, Int}()
         normals_edge = [fill(zero(ELTYPE), SVector{NDIMS}) for _ in 1:(3n_faces)]
+        edge_vertices_ids = fill((0, 0), 3n_faces)
 
         # Not thread supported (yet)
         edge_id = 0
@@ -73,6 +75,7 @@ struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
                 _edges[edge_1] = edge_id
                 edge_id_1 = edge_id
             end
+            edge_vertices_ids[edge_id_1] = edge_1
 
             if haskey(_edges, edge_2)
                 edge_id_2 = _edges[edge_2]
@@ -83,6 +86,7 @@ struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
                 _edges[edge_2] = edge_id
                 edge_id_2 = edge_id
             end
+            edge_vertices_ids[edge_id_2] = edge_2
 
             if haskey(_edges, edge_3)
                 edge_id_3 = _edges[edge_3]
@@ -93,6 +97,7 @@ struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
                 _edges[edge_3] = edge_id
                 edge_id_3 = edge_id
             end
+            edge_vertices_ids[edge_id_3] = edge_3
 
             face_edges_ids[i] = (edge_id_1, edge_id_2, edge_id_3)
 
@@ -108,10 +113,12 @@ struct TriangleMesh{NDIMS, ELTYPE} <: Shapes{NDIMS}
         end
 
         resize!(normals_edge, length(_edges))
+        resize!(edge_vertices_ids, length(_edges))
 
         return new{NDIMS, ELTYPE}(vertices, face_vertices, face_vertices_ids,
-                                  face_edges_ids, normalize.(normals_vertex),
-                                  normalize.(normals_edge), normals_face, min_box, max_box)
+                                  face_edges_ids, edge_vertices_ids,
+                                  normalize.(normals_vertex), normalize.(normals_edge),
+                                  normals_face, min_box, max_box)
     end
 end
 

@@ -29,7 +29,7 @@ function (point_in_poly::WindingNumberJacobson)(mesh::Shapes{3}, points)
 
     inpoly = falses(size(points, 2))
 
-    winding_numbers = zeros(length(inpoly))
+    # winding_numbers = zeros(length(inpoly))
 
     @threaded for query_point in axes(points, 2)
         p = point_position(points, mesh, query_point)
@@ -38,7 +38,7 @@ function (point_in_poly::WindingNumberJacobson)(mesh::Shapes{3}, points)
 
         winding_number /= 4pi
 
-        winding_numbers[query_point] = winding_number
+        # winding_numbers[query_point] = winding_number
 
         # `(winding_number != 0.0)`
         if !(-winding_number_factor < winding_number < winding_number_factor)
@@ -46,7 +46,7 @@ function (point_in_poly::WindingNumberJacobson)(mesh::Shapes{3}, points)
         end
     end
 
-    trixi2vtk(points, filename="winding_number", w=winding_numbers)
+    # trixi2vtk(points, filename="winding_number", w=winding_numbers)
 
     return inpoly
 end
