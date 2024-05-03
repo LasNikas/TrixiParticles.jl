@@ -12,16 +12,34 @@ mutable struct BoundingBoxTree{MC}
     end
 end
 
-function construct_hierarchy!(bounding_box, mesh, directed_edges)
+function hierarchical_winding(bounding_box, mesh, query_point)
+    (; min_corner, max_corner) = bounding_box
+
+    if bounding_box.is_leaf
+        return naive_winding(mesh, bounding_box.faces, query_point)
+
+    elseif region_bit_outcode(query_point, min_corner, max_corner) != 0
+        # `query_point` is outside bounding box
+        return -naive_winding(mesh, bounding_box.closing_faces, query_point)
+    end
+
+    winding_number_left = hierarchical_winding(bounding_box.left, mesh, query_point)
+    winding_number_right = hierarchical_winding(bounding_box.right, mesh, query_point)
+
+    return winding_number_left + winding_number_right
+end
+
+function construct_hierarchy!(bounding_box, mesh, directed_edges, closing_vertex)
     (; max_corner, min_corner, faces) = bounding_box
 
-    if length(faces) < 5
+    if length(faces) < 50
         bounding_box.is_leaf = true
 
         return bounding_box
     end
 
-    bounding_box.closing_faces = determine_exterior(mesh, faces, directed_edges)
+    bounding_box.closing_faces = determine_exterior(mesh, faces, directed_edges,
+                                                    closing_vertex)
 
     if length(bounding_box.closing_faces) >= length(faces)
         bounding_box.is_leaf = true
@@ -48,8 +66,8 @@ function construct_hierarchy!(bounding_box, mesh, directed_edges)
     bounding_box.left = bbox_left
     bounding_box.right = bbox_right
 
-    construct_hierarchy!(bbox_left, mesh, directed_edges)
-    construct_hierarchy!(bbox_right, mesh, directed_edges)
+    construct_hierarchy!(bbox_left, mesh, directed_edges, closing_vertex)
+    construct_hierarchy!(bbox_right, mesh, directed_edges, closing_vertex)
 
     return bounding_box
 end
