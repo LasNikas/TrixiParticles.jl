@@ -1,30 +1,33 @@
-mutable struct BoundingBoxTree{MC}
+struct BoundingBoxTree{MC}
     faces         :: Vector{Int}
     min_corner    :: MC
     max_corner    :: MC
-    is_leaf       :: Bool
+    is_leaf       :: Ref{Bool}
     closing_faces :: Vector{NTuple{3, Int}}
-    left          :: BoundingBoxTree
-    right         :: BoundingBoxTree
+    children      :: Vector{BoundingBoxTree}
 
     function BoundingBoxTree(faces, min_corner, max_corner)
-        return new{typeof(min_corner)}(faces, min_corner, max_corner, false)
+        closing_faces = Vector{NTuple{3, Int}}()
+        children = Vector{BoundingBoxTree}()
+
+        return new{typeof(min_corner)}(faces, min_corner, max_corner, Ref(false),
+                                       closing_faces, children)
     end
 end
 
 function hierarchical_winding(bounding_box, mesh, query_point)
     (; min_corner, max_corner) = bounding_box
 
-    if bounding_box.is_leaf
+    if bounding_box.is_leaf[]
         return naive_winding(mesh, bounding_box.faces, query_point)
 
-    elseif region_bit_outcode(query_point, min_corner, max_corner) != 0
+    elseif in_axis_aligned_box(query_point, min_corner, max_corner) != 0
         # `query_point` is outside bounding box
         return -naive_winding(mesh, bounding_box.closing_faces, query_point)
     end
 
-    winding_number_left = hierarchical_winding(bounding_box.left, mesh, query_point)
-    winding_number_right = hierarchical_winding(bounding_box.right, mesh, query_point)
+    winding_number_left = hierarchical_winding(bounding_box.children[1], mesh, query_point)
+    winding_number_right = hierarchical_winding(bounding_box.children[2], mesh, query_point)
 
     return winding_number_left + winding_number_right
 end
@@ -33,15 +36,15 @@ function construct_hierarchy!(bounding_box, mesh, directed_edges)
     (; max_corner, min_corner, faces) = bounding_box
 
     if length(faces) < 100
-        bounding_box.is_leaf = true
+        bounding_box.is_leaf[] = true
 
         return bounding_box
     end
 
-    bounding_box.closing_faces = determine_exterior(mesh, faces, directed_edges)
+    determine_closure!(bounding_box, mesh, faces, directed_edges)
 
     if length(bounding_box.closing_faces) >= length(faces)
-        bounding_box.is_leaf = true
+        bounding_box.is_leaf[] = true
 
         return bounding_box
     end
@@ -53,8 +56,8 @@ function construct_hierarchy!(bounding_box, mesh, directed_edges)
 
     uvec = (1:3) .== split_direction
 
-    max_corner_left = max_corner - 0.5box_edges[split_direction] * uvec
-    min_corner_right = min_corner + 0.5box_edges[split_direction] * uvec
+    max_corner_left = max_corner - box_edges[split_direction] // 2 * uvec
+    min_corner_right = min_corner + box_edges[split_direction] // 2 * uvec
 
     faces_left = in_bbox(mesh, faces, min_corner, max_corner_left)
     faces_right = in_bbox(mesh, faces, min_corner_right, max_corner)
@@ -62,8 +65,8 @@ function construct_hierarchy!(bounding_box, mesh, directed_edges)
     bbox_left = BoundingBoxTree(faces_left, min_corner, max_corner_left)
     bbox_right = BoundingBoxTree(faces_right, min_corner_right, max_corner)
 
-    bounding_box.left = bbox_left
-    bounding_box.right = bbox_right
+    push!(bounding_box.children, bbox_left)
+    push!(bounding_box.children, bbox_right)
 
     construct_hierarchy!(bbox_left, mesh, directed_edges)
     construct_hierarchy!(bbox_right, mesh, directed_edges)
@@ -71,13 +74,12 @@ function construct_hierarchy!(bounding_box, mesh, directed_edges)
     return bounding_box
 end
 
-function determine_exterior(mesh::Shapes{3}, faces, count_directed_edge)
+function determine_closure!(bounding_box, mesh::Shapes{3}, faces, count_directed_edge)
     (; edge_vertices_ids, face_vertices_ids, face_edges_ids) = mesh
 
     count_directed_edge .= 0
 
-    # allotherfaces = setdiff(eachface(mesh), faces)
-
+    # Find all exterior edges
     for face in faces
         v1 = face_vertices_ids[face][1]
         v2 = face_vertices_ids[face][2]
@@ -105,12 +107,10 @@ function determine_exterior(mesh::Shapes{3}, faces, count_directed_edge)
     end
 
     closing_edges = findall(!iszero, count_directed_edge)
-    closing_faces = Vector{Tuple{Int, Int, Int}}()
+    resize!(bounding_box.closing_faces, 0)
 
     if !isempty(closing_edges)
         closing_vertex = edge_vertices_ids[closing_edges[1]][2]
-    else
-        closing_vertex = nothing
     end
 
     for edge in closing_edges
@@ -123,23 +123,23 @@ function determine_exterior(mesh::Shapes{3}, faces, count_directed_edge)
 
         if count_directed_edge[edge] < 0
             @inbounds for _ in 1:abs(count_directed_edge[edge])
-                push!(closing_faces, (v1, v2, closing_vertex))
+                push!(bounding_box.closing_faces, (v1, v2, closing_vertex))
             end
         elseif count_directed_edge[edge] > 0
             @inbounds for _ in 1:abs(count_directed_edge[edge])
-                push!(closing_faces, (v2, v1, closing_vertex))
+                push!(bounding_box.closing_faces, (v2, v1, closing_vertex))
             end
         end
     end
 
-    return closing_faces
+    return bounding_box
 end
 
 function in_bbox(mesh, faces, min_corner, max_corner)
     faces_in_bbox = Int[]
 
     for face in faces
-        if region_bit_outcode(barycenter(mesh, face), min_corner, max_corner) == 0
+        if in_axis_aligned_box(barycenter(mesh, face), min_corner, max_corner) == 0
             push!(faces_in_bbox, face)
         end
     end
@@ -166,7 +166,7 @@ end
     return (v1 + v2 + v3) / 3
 end
 
-@inline function region_bit_outcode(p::SVector{2}, min_corner, max_corner)
+@inline function in_axis_aligned_box(p::SVector{2}, min_corner, max_corner)
     pos = 0
 
     # Left `0001`
@@ -191,7 +191,7 @@ end
     return pos
 end
 
-@inline function region_bit_outcode(p::SVector{3}, min_corner, max_corner)
+@inline function in_axis_aligned_box(p::SVector{3}, min_corner, max_corner)
     pos = 0
 
     # Left `000001`
