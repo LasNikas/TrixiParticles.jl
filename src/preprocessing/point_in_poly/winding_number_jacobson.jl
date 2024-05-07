@@ -12,7 +12,6 @@ end
 # ACM Trans. Graph. 32, 4, Article 33 (July 2013), 12 pages.
 # https://doi.org/10.1145/2461912.2461916
 
-# ALterantive implementation: https://github.com/JuliaGeometry/Meshes.jl/blob/3e5272392ca917668c7ec3844a14b325c7568e31/src/winding.jl
 struct WindingNumberJacobson{ELTYPE}
     winding_number_factor :: ELTYPE
     winding               :: Union{NaiveWinding, HierarchicalWinding}

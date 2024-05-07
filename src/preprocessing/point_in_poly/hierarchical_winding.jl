@@ -170,20 +170,20 @@ end
     pos = 0
 
     # Left `0001`
-    if p[1] < min_corner[1]
+    if p[1] <= min_corner[1]
         pos |= 1
 
         # Right `0010`
-    elseif p[1] > max_corner[1]
+    elseif p[1] >= max_corner[1]
         pos |= 2
     end
 
     # Bottom `0100`
-    if p[2] < min_corner[2]
+    if p[2] <= min_corner[2]
         pos |= 4
 
         # Top `1000`
-    elseif p[2] > max_corner[2]
+    elseif p[2] >= max_corner[2]
         pos |= 8
     end
 
@@ -195,28 +195,28 @@ end
     pos = 0
 
     # Left `000001`
-    if p[1] < min_corner[1]
+    if p[1] <= min_corner[1]
         pos |= 1
 
         # Right `000010`
-    elseif p[1] > max_corner[1]
+    elseif p[1] >= max_corner[1]
         pos |= 2
     end
 
     # Bottom `000100`
-    if p[2] < min_corner[2]
+    if p[2] <= min_corner[2]
         pos |= 4
 
         # Top `001000`
-    elseif p[2] > max_corner[2]
+    elseif p[2] >= max_corner[2]
         pos |= 8
     end
 
     # Behind `010000`
-    if p[3] < min_corner[3]
+    if p[3] <= min_corner[3]
         pos |= 16
         # Front `100000`
-    elseif p[3] > max_corner[3]
+    elseif p[3] >= max_corner[3]
         pos |= 32
     end
 
