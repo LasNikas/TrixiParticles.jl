@@ -21,7 +21,7 @@ function hierarchical_winding(bounding_box, mesh, query_point)
     if bounding_box.is_leaf[]
         return naive_winding(mesh, bounding_box.faces, query_point)
 
-    elseif in_axis_aligned_box(query_point, min_corner, max_corner) != 0
+    elseif !in_bounding_box(query_point, min_corner, max_corner)
         # `query_point` is outside bounding box
         return -naive_winding(mesh, bounding_box.closing_faces, query_point)
     end
@@ -56,8 +56,8 @@ function construct_hierarchy!(bounding_box, mesh, directed_edges)
 
     uvec = (1:3) .== split_direction
 
-    max_corner_left = max_corner - box_edges[split_direction] // 2 * uvec
-    min_corner_right = min_corner + box_edges[split_direction] // 2 * uvec
+    max_corner_left = max_corner - 0.5box_edges[split_direction] * uvec
+    min_corner_right = min_corner + 0.5box_edges[split_direction] * uvec
 
     faces_left = in_bbox(mesh, faces, min_corner, max_corner_left)
     faces_right = in_bbox(mesh, faces, min_corner_right, max_corner)
@@ -75,9 +75,11 @@ function construct_hierarchy!(bounding_box, mesh, directed_edges)
 end
 
 function determine_closure!(bounding_box, mesh::Shapes{3}, faces, count_directed_edge)
-    (; edge_vertices_ids, face_vertices_ids, face_edges_ids) = mesh
+    (; edge_vertices_ids, face_vertices_ids, face_edges_ids, vertices) = mesh
+    (; min_corner, max_corner) = bounding_box
 
     count_directed_edge .= 0
+    intersecting_faces = Int[]
 
     # Find all exterior edges
     for face in faces
@@ -85,24 +87,37 @@ function determine_closure!(bounding_box, mesh::Shapes{3}, faces, count_directed
         v2 = face_vertices_ids[face][2]
         v3 = face_vertices_ids[face][3]
 
-        edge1 = face_edges_ids[face][1]
-        edge2 = face_edges_ids[face][2]
-        edge3 = face_edges_ids[face][3]
+        if in_bounding_box(vertices[v1], min_corner, max_corner) &&
+           in_bounding_box(vertices[v2], min_corner, max_corner) &&
+           in_bounding_box(vertices[v3], min_corner, max_corner)
+            # Face is completely inside the bounding box
 
-        if edge_vertices_ids[edge1] == (v1, v2)
-            count_directed_edge[edge1] += 1
-        else
-            count_directed_edge[edge1] -= 1
-        end
-        if edge_vertices_ids[edge2] == (v2, v3)
-            count_directed_edge[edge2] += 1
-        else
-            count_directed_edge[edge2] -= 1
-        end
-        if edge_vertices_ids[edge3] == (v3, v1)
-            count_directed_edge[edge3] += 1
-        else
-            count_directed_edge[edge3] -= 1
+            edge1 = face_edges_ids[face][1]
+            edge2 = face_edges_ids[face][2]
+            edge3 = face_edges_ids[face][3]
+
+            if edge_vertices_ids[edge1] == (v1, v2)
+                count_directed_edge[edge1] += 1
+            else
+                count_directed_edge[edge1] -= 1
+            end
+            if edge_vertices_ids[edge2] == (v2, v3)
+                count_directed_edge[edge2] += 1
+            else
+                count_directed_edge[edge2] -= 1
+            end
+            if edge_vertices_ids[edge3] == (v3, v1)
+                count_directed_edge[edge3] += 1
+            else
+                count_directed_edge[edge3] -= 1
+            end
+
+        elseif !in_bounding_box(vertices[v1], min_corner, max_corner) ||
+               !in_bounding_box(vertices[v2], min_corner, max_corner) ||
+               !in_bounding_box(vertices[v3], min_corner, max_corner)
+            # Face is intersecting the boundaries
+
+            push!(intersecting_faces, face)
         end
     end
 
@@ -132,6 +147,15 @@ function determine_closure!(bounding_box, mesh::Shapes{3}, faces, count_directed
         end
     end
 
+    for face in intersecting_faces
+        v1 = face_vertices_ids[face][1]
+        v2 = face_vertices_ids[face][2]
+        v3 = face_vertices_ids[face][3]
+
+        # Flip order of vertices
+        push!(bounding_box.closing_faces, (v3, v2, v1))
+    end
+
     return bounding_box
 end
 
@@ -139,7 +163,7 @@ function in_bbox(mesh, faces, min_corner, max_corner)
     faces_in_bbox = Int[]
 
     for face in faces
-        if in_axis_aligned_box(barycenter(mesh, face), min_corner, max_corner) == 0
+        if in_bounding_box(barycenter(mesh, face), min_corner, max_corner)
             push!(faces_in_bbox, face)
         end
     end
@@ -166,60 +190,25 @@ end
     return (v1 + v2 + v3) / 3
 end
 
-@inline function in_axis_aligned_box(p::SVector{2}, min_corner, max_corner)
-    pos = 0
+@inline function in_bounding_box(p::SVector{2}, min_corner, max_corner)
+    p[1] < min_corner[1] && return false
+    p[1] >= max_corner[1] && return false
 
-    # Left `0001`
-    if p[1] <= min_corner[1]
-        pos |= 1
+    p[2] < min_corner[2] && return false
+    p[2] >= max_corner[2] && return false
 
-        # Right `0010`
-    elseif p[1] >= max_corner[1]
-        pos |= 2
-    end
-
-    # Bottom `0100`
-    if p[2] <= min_corner[2]
-        pos |= 4
-
-        # Top `1000`
-    elseif p[2] >= max_corner[2]
-        pos |= 8
-    end
-
-    # Inside `0000`
-    return pos
+    return true
 end
 
-@inline function in_axis_aligned_box(p::SVector{3}, min_corner, max_corner)
-    pos = 0
+@inline function in_bounding_box(p::SVector{3}, min_corner, max_corner)
+    p[1] < min_corner[1] && return false
+    p[1] >= max_corner[1] && return false
 
-    # Left `000001`
-    if p[1] <= min_corner[1]
-        pos |= 1
+    p[2] < min_corner[2] && return false
+    p[2] >= max_corner[2] && return false
 
-        # Right `000010`
-    elseif p[1] >= max_corner[1]
-        pos |= 2
-    end
+    p[3] < min_corner[3] && return false
+    p[3] >= max_corner[3] && return false
 
-    # Bottom `000100`
-    if p[2] <= min_corner[2]
-        pos |= 4
-
-        # Top `001000`
-    elseif p[2] >= max_corner[2]
-        pos |= 8
-    end
-
-    # Behind `010000`
-    if p[3] <= min_corner[3]
-        pos |= 16
-        # Front `100000`
-    elseif p[3] >= max_corner[3]
-        pos |= 32
-    end
-
-    # Inside `000000`
-    return pos
+    return true
 end
