@@ -11,7 +11,7 @@ boundary_layers = 3
 # ==========================================================================================
 # ==== Experiment Setup
 gravity = 9.81
-tspan = (0.0, 1.0)
+tspan = (0.0, 2.0)
 
 # Boundary geometry and initial fluid particle positions
 initial_fluid_size = (1.0, 0.9)
@@ -23,9 +23,11 @@ state_equation = StateEquationCole(; sound_speed, reference_density=fluid_densit
                                    exponent=7, clip_negative_pressure=false)
 
 tank = RectangularTank(fluid_particle_spacing, initial_fluid_size, tank_size, fluid_density,
-                       n_layers=boundary_layers,
+                       n_layers=boundary_layers, faces=(true, true, true, false),
                        acceleration=(0.0, -gravity), state_equation=state_equation)
 
+fluid_suspension = RectangularShape(fluid_particle_spacing, (20, 20), (0.5, 1.5),
+                                    density=fluid_density)
 # ==========================================================================================
 # ==== Fluid
 smoothing_length = 1.2 * fluid_particle_spacing
@@ -35,6 +37,11 @@ viscosity = ArtificialViscosityMonaghan(alpha=0.02, beta=0.0)
 
 fluid_density_calculator = ContinuityDensity()
 fluid_system = WeaklyCompressibleSPHSystem(tank.fluid, fluid_density_calculator,
+                                           state_equation, smoothing_kernel,
+                                           smoothing_length, viscosity=viscosity,
+                                           acceleration=(0.0, -gravity),
+                                           source_terms=nothing)
+fluid_system2 = WeaklyCompressibleSPHSystem(fluid_suspension, fluid_density_calculator,
                                            state_equation, smoothing_kernel,
                                            smoothing_length, viscosity=viscosity,
                                            acceleration=(0.0, -gravity),
@@ -57,7 +64,7 @@ boundary_system = BoundarySPHSystem(tank.boundary, boundary_model, movement=noth
 
 # ==========================================================================================
 # ==== Simulation
-semi = Semidiscretization(fluid_system, boundary_system)
+semi = Semidiscretization(fluid_system, boundary_system, fluid_system2)
 ode = semidiscretize(semi, tspan)
 
 info_callback = InfoCallback(interval=50)

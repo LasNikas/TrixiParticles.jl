@@ -422,6 +422,14 @@ function kick!(dv_ode, v_ode, u_ode, semi, t)
 
         @trixi_timeit timer() "source terms" add_source_terms!(dv_ode, v_ode, u_ode, semi)
     end
+    system_index = 3 # ???
+    condition_to_move = t < 1.0 # ????
+    foreach_system(semi) do system
+        if system_indices(system, semi) == system_index && condition_to_move
+            dv = wrap_v(dv_ode, system, semi)
+            set_zero!(dv)
+        end
+    end
 
     return dv_ode
 end
