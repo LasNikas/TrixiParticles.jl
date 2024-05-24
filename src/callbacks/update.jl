@@ -70,6 +70,14 @@ function (update_callback!::UpdateCallback)(integrator)
     # Update quantities that are stored in the systems. These quantities (e.g. pressure)
     # still have the values from the last stage of the previous step if not updated here.
     update_systems_and_nhs(v_ode, u_ode, semi, t)
+    system_index = 2 # ???
+    condition_to_move = t < 1.0 # ????
+    foreach_system(semi) do system
+        if system_indices(system, semi) == system_index && condition_to_move
+            v = wrap_v(v_ode, system, semi)
+            set_zero!(v)
+        end
+    end
 
     # Other updates might be added here later (e.g. Transport Velocity Formulation).
     # @trixi_timeit timer() "update open boundary" foreach_system(semi) do system
@@ -107,7 +115,7 @@ function Base.show(io::IO, ::MIME"text/plain",
     else
         update_cb = cb.affect!
         setup = [
-            "interval" => update_cb.interval,
+            "interval" => update_cb.interval
         ]
         summary_box(io, "UpdateCallback", setup)
     end
@@ -123,7 +131,7 @@ function Base.show(io::IO, ::MIME"text/plain",
     else
         update_cb = cb.affect!.affect!
         setup = [
-            "dt" => update_cb.interval,
+            "dt" => update_cb.interval
         ]
         summary_box(io, "UpdateCallback", setup)
     end
