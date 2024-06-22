@@ -2,7 +2,7 @@ using TrixiParticles
 
 particle_spacing = 0.05
 
-file = "sphere"
+file = "plane"
 filename = joinpath("examples", "preprocessing", file * ".stl")
 
 # The following triangle mesh is corrupt.
