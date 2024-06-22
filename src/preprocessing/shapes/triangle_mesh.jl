@@ -105,6 +105,8 @@ end
 
 @inline nfaces(mesh::TriangleMesh) = length(mesh.normals_face)
 
+@inline face_normal(triangle, shape::TriangleMesh) = shape.normals_face[triangle]
+
 @inline function face_vertices(triangle, shape::TriangleMesh)
     v1 = shape.face_vertices[triangle][1]
     v2 = shape.face_vertices[triangle][2]

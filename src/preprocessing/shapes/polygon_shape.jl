@@ -101,3 +101,5 @@ end
 
     return v1, v2
 end
+
+@inline face_normal(edge, shape::Polygon) = shape.normals_edge[edge]
