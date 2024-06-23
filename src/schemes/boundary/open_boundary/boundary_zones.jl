@@ -284,11 +284,11 @@ function calculate_spanning_vectors(plane::Shapes{3}, zone_width)
     edge1 = plane_points[:, 2] - plane_points[:, 1]
     edge2 = plane_points[:, 3] - plane_points[:, 1]
 
-    if !isapprox(normalize(cross(edge2, edge1)), plane_normal, atol=1e-7)
+    if !isapprox(abs.(normalize(cross(edge2, edge1))), abs.(plane_normal), atol=1e-2)
         throw(ArgumentError("`plane` might be not planar"))
     end
 
-    return hcat(plane_normal * zone_width, edge1, edge2)
+    return hcat(plane_normal * zone_width, edge1, edge2), SVector(plane_points[:, 1]...)
 end
 
 function spanning_vectors(plane_points::NTuple{2}, zone_width)
