@@ -139,3 +139,5 @@ function Base.show(io::IO, ::MIME"text/plain",
 end
 
 update_callback_used!(system) = system
+
+update_particle_packing(system, v_ode, u_ode, semi, integrator) = system
