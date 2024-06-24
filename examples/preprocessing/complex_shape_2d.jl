@@ -2,8 +2,8 @@ using TrixiParticles
 
 particle_spacing = 0.05
 
-file = "hexagon"
-filename = joinpath("examples", "preprocessing", file * ".asc")
+file = "dot_1"
+filename = joinpath("examples", "preprocessing", "julia_logo", file * ".asc")
 
 # Returns `Shape`
 shape = load_shape(filename)

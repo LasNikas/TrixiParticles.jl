@@ -4,7 +4,7 @@ using OrdinaryDiffEq
 # ==========================================================================================
 # ==== Resolution
 
-particle_spacing = 0.05
+particle_spacing = 0.3
 
 # ==========================================================================================
 # ==== Experiment Setup
@@ -15,10 +15,10 @@ fluid_density = 1000.0
 solid_density = 300.0
 
 # Young's modulus and Poisson ratio
-E = 1e4
+E = 1e6
 nu = 0.0
 
-sound_speed = 20 * sqrt(gravity * 2.0)
+sound_speed = 20 * sqrt(gravity * 10.0)
 
 state_equation = StateEquationCole(; sound_speed, reference_density=fluid_density,
                                    exponent=7, clip_negative_pressure=false)
@@ -28,33 +28,30 @@ trixi_include(@__MODULE__,
               particle_spacing=particle_spacing, fluid_density=fluid_density,
               solid_density=solid_density)
 
-tank = RectangularTank(particle_spacing, (0.0, 0.0, 0.0), (6.0, 2.0, 0.3),
+tank = RectangularTank(particle_spacing, (0.0, 0.0), (42.0, 8.0),
                        fluid_density; boundary_density=fluid_density,
-                       n_layers=4, min_coordinates=[-3.0, -2.0, -0.5],
-                       faces=(true, true, true, false, true, true))
+                       n_layers=4, min_coordinates=[0.0, -28.0],
+                       faces=(true, true, true, false))
 # ==========================================================================================
 # ==== Fluid
 smoothing_length = 3.0 * particle_spacing
-smoothing_kernel = WendlandC2Kernel{3}()
-
-fluid_density_calculator = ContinuityDensity()
+smoothing_kernel = WendlandC2Kernel{2}()
 
 viscosity = ArtificialViscosityMonaghan(alpha=0.05, beta=0.0)
 
 fluid_density_calculator = ContinuityDensity()
-fluid_system = WeaklyCompressibleSPHSystem(initial_conditions[1], fluid_density_calculator,
+fluid_system = WeaklyCompressibleSPHSystem(letters, fluid_density_calculator,
                                            state_equation, smoothing_kernel,
                                            smoothing_length, viscosity=viscosity,
-                                           acceleration=(0.0, -gravity, 0.0))
+                                           acceleration=(0.0, -gravity))
 
 # ==========================================================================================
 # ==== Solid
 solid_smoothing_length = 2 * sqrt(2) * particle_spacing
-solid_smoothing_kernel = WendlandC2Kernel{3}()
+solid_smoothing_kernel = WendlandC2Kernel{2}()
 
 solid_systems = Vector{TotalLagrangianSPHSystem}()
-for i in eachindex(file_names)
-    file_names[i] == "letters" && continue
+for i in eachindex(file_names[1:4])
     ic = initial_conditions[i]
     hydrodynamic_densites = fluid_density * ones(size(ic.density))
     hydrodynamic_masses = hydrodynamic_densites * particle_spacing^ndims(fluid_system)
@@ -70,7 +67,7 @@ for i in eachindex(file_names)
                                             solid_smoothing_kernel,
                                             solid_smoothing_length,
                                             E, nu,
-                                            acceleration=(0.0, -gravity, 0.0),
+                                            acceleration=(0.0, -gravity),
                                             boundary_model=solid_boundary_model,
                                             penalty_force=PenaltyForceGanzenmueller(alpha=0.3))
     push!(solid_systems, solid_system)
