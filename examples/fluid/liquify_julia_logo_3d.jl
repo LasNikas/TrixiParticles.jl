@@ -28,10 +28,10 @@ trixi_include(@__MODULE__,
               particle_spacing=particle_spacing, fluid_density=fluid_density,
               solid_density=solid_density)
 
-tank = RectangularTank(particle_spacing, (0.0, 0.0, 0.0), (5.5, 1.5, 1.3),
+tank = RectangularTank(particle_spacing, (0.0, 0.0, 0.0), (5.5, 1.5, 0.15),
                        fluid_density; boundary_density=fluid_density,
-                       n_layers=4, min_coordinates=[-2.7, -2.0, -0.8],
-                       faces=(true, true, true, false, true, false))
+                       n_layers=4, min_coordinates=[-2.7, -2.0, -0.41],
+                       faces=(true, true, true, false, true, true))
 # ==========================================================================================
 # ==== Fluid
 smoothing_length = 3.0 * particle_spacing
