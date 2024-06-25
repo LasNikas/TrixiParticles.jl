@@ -10,13 +10,13 @@ Supported file formats are `.stl` and `.asc`.
 # Keywords
 - `element_type`: Element type (default is `Float64`)
 """
-function load_shape(filename; element_type=Float64)
+function load_shape(filename; element_type=Float64, scale_shape=1.0)
     ELTYPE = element_type
 
     file_extension = splitext(filename)[end]
 
     if file_extension == ".asc"
-        shape = load_ascii(filename; ELTYPE, skipstart=1)
+        shape = load_ascii(filename; ELTYPE, skipstart=1, scale_shape)
     elseif file_extension == ".stl"
         shape = load(query(filename); ELTYPE)
     else
@@ -26,7 +26,7 @@ function load_shape(filename; element_type=Float64)
     return shape
 end
 
-function load_ascii(filename; ELTYPE=Float64, skipstart=1)
+function load_ascii(filename; ELTYPE=Float64, skipstart=1, scale_shape=1.0)
 
     # Read in the ASCII file as an Tuple containing the coordinates of the points and the
     # header.
@@ -35,7 +35,9 @@ function load_ascii(filename; ELTYPE=Float64, skipstart=1)
     # or ignoring the corresponding number of lines from the input with `skipstart`
     points = readdlm(filename, ' ', ELTYPE, '\n'; skipstart)[:, 1:2]
 
-    return Polygon(copy(points'))
+    points_ = scale_shape .* points
+
+    return Polygon(copy(points_'))
 end
 
 # FileIO.jl docs:

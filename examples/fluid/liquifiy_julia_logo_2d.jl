@@ -4,7 +4,7 @@ using OrdinaryDiffEq
 # ==========================================================================================
 # ==== Resolution
 
-particle_spacing = 0.3
+particle_spacing = 0.01
 
 # ==========================================================================================
 # ==== Experiment Setup
@@ -18,33 +18,38 @@ solid_density = 300.0
 E = 1e6
 nu = 0.0
 
-sound_speed = 20 * sqrt(gravity * 10.0)
+sound_speed = 20 * sqrt(gravity * 2.0)
 
 state_equation = StateEquationCole(; sound_speed, reference_density=fluid_density,
-                                   exponent=7, clip_negative_pressure=false)
+                                   exponent=7, clip_negative_pressure=true)
 
 trixi_include(@__MODULE__,
-              joinpath(examples_dir(), "preprocessing", "liquify_julia_logo.jl"),
+              joinpath(examples_dir(), "preprocessing", "liquify_julia_logo_2d.jl"),
               particle_spacing=particle_spacing, fluid_density=fluid_density,
-              solid_density=solid_density)
+              solid_density=solid_density, scale_shape=0.1)
 
-tank = RectangularTank(particle_spacing, (0.0, 0.0), (42.0, 8.0),
+tank = RectangularTank(particle_spacing, (0.0, 0.0), (5.0, 3.0),
                        fluid_density; boundary_density=fluid_density,
-                       n_layers=4, min_coordinates=[0.0, -28.0],
+                       n_layers=4, min_coordinates=[0.0, -2.8],
                        faces=(true, true, true, false))
 # ==========================================================================================
 # ==== Fluid
 smoothing_length = 3.0 * particle_spacing
 smoothing_kernel = WendlandC2Kernel{2}()
 
-viscosity = ArtificialViscosityMonaghan(alpha=0.05, beta=0.0)
+alpha = 0.02
 
 fluid_density_calculator = ContinuityDensity()
-fluid_system = WeaklyCompressibleSPHSystem(letters, fluid_density_calculator,
-                                           state_equation, smoothing_kernel,
-                                           smoothing_length, viscosity=viscosity,
+# viscosity = ArtificialViscosityMonaghan(alpha=alpha, beta=0.0)
+# fluid_system = WeaklyCompressibleSPHSystem(letters, fluid_density_calculator,
+#                                            state_equation, smoothing_kernel,
+#                                            smoothing_length, viscosity=viscosity,
+#                                            acceleration=(0.0, -gravity))
+viscosity = ViscosityAdami(nu=alpha * smoothing_length * sound_speed / 8)
+fluid_system = EntropicallyDampedSPHSystem(letters, smoothing_kernel, smoothing_length,
+                                           sound_speed, viscosity=viscosity,
+                                           density_calculator=fluid_density_calculator,
                                            acceleration=(0.0, -gravity))
-
 # ==========================================================================================
 # ==== Solid
 solid_smoothing_length = 2 * sqrt(2) * particle_spacing
@@ -90,7 +95,7 @@ semi = Semidiscretization(fluid_system, boundary_system, solid_systems...)
 ode = semidiscretize(semi, tspan)
 
 info_callback = InfoCallback(interval=100)
-saving_callback = SolutionSavingCallback(dt=0.02, prefix="")
+saving_callback = SolutionSavingCallback(dt=0.02, prefix="", output_directory="out_julia_logo_2d_dp_$particle_spacing")
 
 callbacks = CallbackSet(info_callback, saving_callback)
 
