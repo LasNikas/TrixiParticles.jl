@@ -89,6 +89,10 @@ function (update_callback!::UpdateCallback)(integrator)
         update_particle_packing(system, v_ode, u_ode, semi, integrator)
     end
 
+    @trixi_timeit timer() "update TVF" foreach_system(semi) do system
+        update_transport_velocity!(system, v_ode, semi)
+    end
+
     # Tell OrdinaryDiffEq that `u` has been modified
     u_modified!(integrator, true)
 
@@ -116,7 +120,7 @@ function Base.show(io::IO, ::MIME"text/plain",
     else
         update_cb = cb.affect!
         setup = [
-            "interval" => update_cb.interval,
+            "interval" => update_cb.interval
         ]
         summary_box(io, "UpdateCallback", setup)
     end
@@ -132,12 +136,11 @@ function Base.show(io::IO, ::MIME"text/plain",
     else
         update_cb = cb.affect!.affect!
         setup = [
-            "dt" => update_cb.interval,
+            "dt" => update_cb.interval
         ]
         summary_box(io, "UpdateCallback", setup)
     end
 end
 
 update_callback_used!(system) = system
-
 update_particle_packing(system, v_ode, u_ode, semi, integrator) = system
