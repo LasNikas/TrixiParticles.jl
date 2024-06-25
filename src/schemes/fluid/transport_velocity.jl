@@ -140,7 +140,7 @@ function reset_callback_flag!(system::FluidSystem)
     reset_callback_flag!(system, system.transport_velocity)
 end
 
-reset_callback_flag!(system, ::Nothing) = system
+reset_callback_flag!(system::FluidSystem, ::Nothing) = system
 
 function reset_callback_flag!(system::FluidSystem, transport_velocity)
     system.cache.update_callback_used[] = false
@@ -152,7 +152,7 @@ function update_callback_used!(system::FluidSystem)
     update_callback_used!(system, system.transport_velocity)
 end
 
-update_callback_used!(system, ::Nothing) = system
+update_callback_used!(system::FluidSystem, ::Nothing) = system
 
 function update_callback_used!(system, transport_velocity)
     system.cache.update_callback_used[] = true
@@ -165,7 +165,7 @@ function update_final!(system::FluidSystem, v, u, v_ode, u_ode, semi, t;
 end
 
 function update_final!(system::FluidSystem, ::Nothing,
-                       v, u, v_ode, u_ode, semi, t)
+                       v, u, v_ode, u_ode, semi, t; update_from_callback=false)
     return system
 end
 
