@@ -6,7 +6,7 @@ particle_spacings = [0.02, 0.01, 0.005]
 
 # ==========================================================================================
 # ==== Experiment Setup
-tspan = (0.0, 0.1)
+tspan = (0.0, 30.0)
 reynolds_numbers = [100.0, 1000.0, 10_000.0]
 
 vx_y(v, u, t, system) = nothing
@@ -45,8 +45,10 @@ for particle_spacing in particle_spacings, reynolds_number in reynolds_numbers
                                   output_directory=output_directory,
                                   filename="kinetic_energy")
 
-    steady_state = SteadyStateCallback(; dt=0.04, interval_size=10, abstol=1.0e-8,
-                                       reltol=1.0e-6)
+    interval_size = round(Int, 0.2 / particle_spacing)
+
+    steady_state = SteadyStateCallback(; dt=0.04, interval_size=interval_size,
+                                       abstol=1.0e-8, reltol=1.0e-6)
 
     pos = collect(LinRange(0.0, 1.0, n_particles_xy))
 
@@ -57,12 +59,12 @@ for particle_spacing in particle_spacings, reynolds_number in reynolds_numbers
                                          output_directory=output_directory,
                                          vx_y=vx_y, vy_x=vy_x)
 
-    callbacks = (info_callback, saving_callback, UpdateCallback(),
-                 ekin_cb, steady_state, table_data)
-
     # Import variables into scope
     trixi_include(@__MODULE__,
                   joinpath(examples_dir(), "fluid", "lid_driven_cavity_2d.jl"),
-                  saving_callback=saving_callback, tspan=tspan, callbacks=callbacks,
-                  particle_spacing=particle_spacing, reynolds_number=reynolds_number)
+                  saving_callback=saving_callback, tspan=tspan,
+                  callbacks=(info_callback, saving_callback, UpdateCallback(),
+                             ekin_cb, table_data, steady_state),
+                  particle_spacing=particle_spacing,
+                  reynolds_number=reynolds_number)
 end
