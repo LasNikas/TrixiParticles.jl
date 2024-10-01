@@ -880,3 +880,12 @@ function check_configuration(system::OpenBoundarySPHSystem, systems)
                             "Please specify inflow and outflow."))
     end
 end
+
+function check_configuration(system::FluidSystem, systems)
+    (; viscosity) = system
+
+    if viscosity isa ArtificialViscosityMonaghan &&
+       system.transport_velocity isa TransportVelocityAdami
+        throw(ArgumentError("Please use `ViscosityAdami` when simulating with `TransportVelocityAdami`"))
+    end
+end
