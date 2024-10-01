@@ -30,7 +30,7 @@ Open boundary system for in- and outflow particles.
 	This is an experimental feature and may change in any future releases.
 """
 struct OpenBoundarySPHSystem{BM, BZ, NDIMS, ELTYPE <: Real, IC, FS, ARRAY1D, RV,
-                             RP, RD, B, C} <: System{NDIMS, IC}
+                             RP, RD, TV, B, C} <: System{NDIMS, IC}
     initial_condition    :: IC
     fluid_system         :: FS
     boundary_model       :: BM
@@ -42,6 +42,7 @@ struct OpenBoundarySPHSystem{BM, BZ, NDIMS, ELTYPE <: Real, IC, FS, ARRAY1D, RV,
     reference_velocity   :: RV
     reference_pressure   :: RP
     reference_density    :: RD
+    transport_velocity   :: TV
     buffer               :: B
     update_callback_used :: Ref{Bool}
     cache                :: C
@@ -49,6 +50,7 @@ struct OpenBoundarySPHSystem{BM, BZ, NDIMS, ELTYPE <: Real, IC, FS, ARRAY1D, RV,
     function OpenBoundarySPHSystem(boundary_zone::BoundaryZone;
                                    fluid_system::FluidSystem,
                                    buffer_size::Integer, boundary_model,
+                                   transport_velocity=nothing,
                                    reference_velocity=nothing,
                                    reference_pressure=nothing,
                                    reference_density=nothing)
@@ -104,11 +106,12 @@ struct OpenBoundarySPHSystem{BM, BZ, NDIMS, ELTYPE <: Real, IC, FS, ARRAY1D, RV,
         return new{typeof(boundary_model), typeof(boundary_zone), NDIMS, ELTYPE,
                    typeof(initial_condition), typeof(fluid_system), typeof(mass),
                    typeof(reference_velocity_), typeof(reference_pressure_),
-                   typeof(reference_density_), typeof(buffer),
+                   typeof(reference_density_), typeof(transport_velocity), typeof(buffer),
                    typeof(cache)}(initial_condition, fluid_system, boundary_model, mass,
                                   density, volume, pressure, boundary_zone,
                                   reference_velocity_, reference_pressure_,
-                                  reference_density_, buffer, false, cache)
+                                  reference_density_, transport_velocity, buffer, false,
+                                  cache)
     end
 end
 

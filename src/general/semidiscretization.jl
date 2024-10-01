@@ -145,8 +145,18 @@ end
 
 @inline function compact_support(system::OpenBoundarySPHSystem,
                                  neighbor::OpenBoundarySPHSystem)
+    compact_support(system, neighbor, system.transport_velocity)
+end
+
+@inline function compact_support(system::OpenBoundarySPHSystem,
+                                 neighbor::OpenBoundarySPHSystem, ::Nothing)
     # This NHS is never used
     return 0.0
+end
+
+@inline function compact_support(system::OpenBoundarySPHSystem,
+                                 neighbor::OpenBoundarySPHSystem, ::TransportVelocityAdami)
+    return compact_support(system.fluid_system, system)
 end
 
 @inline function compact_support(system::BoundaryDEMSystem, neighbor::BoundaryDEMSystem)
@@ -688,6 +698,33 @@ function update_nhs!(neighborhood_search,
 end
 
 function update_nhs!(neighborhood_search,
+                     system::OpenBoundarySPHSystem, neighbor::OpenBoundarySPHSystem,
+                     u_system, u_neighbor)
+    update_nhs!(neighborhood_search,
+                system, neighbor, u_system, u_neighbor, system.transport_velocity)
+end
+
+function update_nhs!(neighborhood_search,
+                     system::OpenBoundarySPHSystem, neighbor::OpenBoundarySPHSystem,
+                     u_system, u_neighbor, ::TransportVelocityAdami)
+    # The current coordinates of both open boundaries and fluids change over time.
+
+    # TODO: Update only `active_coordinates` of open boundaries.
+    # Problem: Removing inactive particles from neighboring lists is necessary.
+    update!(neighborhood_search, system,
+            current_coordinates(u_system, system),
+            current_coordinates(u_neighbor, neighbor),
+            points_moving=(true, true))
+end
+
+function update_nhs!(neighborhood_search,
+                     system::OpenBoundarySPHSystem, neighbor::OpenBoundarySPHSystem,
+                     u_system, u_neighbor, ::Nothing)
+    # Don't update. This NHS is never used.
+    return neighborhood_search
+end
+
+function update_nhs!(neighborhood_search,
                      system::TotalLagrangianSPHSystem, neighbor::FluidSystem,
                      u_system, u_neighbor)
     # The current coordinates of fluids and solids change over time
@@ -799,14 +836,14 @@ end
 
 function update_nhs!(neighborhood_search,
                      system::Union{BoundarySPHSystem, OpenBoundarySPHSystem},
-                     neighbor::Union{BoundarySPHSystem, OpenBoundarySPHSystem},
+                     neighbor::BoundarySPHSystem,
                      u_system, u_neighbor)
     # Don't update. This NHS is never used.
     return neighborhood_search
 end
 
 function update_nhs!(neighborhood_search,
-                     system::TotalLagrangianSPHSystem,
+                     system::Union{BoundarySPHSystem, TotalLagrangianSPHSystem},
                      neighbor::OpenBoundarySPHSystem,
                      u_system, u_neighbor)
     # Don't update. This NHS is never used.

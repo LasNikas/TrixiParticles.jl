@@ -38,6 +38,56 @@ function interact!(dv, v_particle_system, u_particle_system,
     return dv
 end
 
+function interact!(dv, v_particle_system, u_particle_system,
+                   v_neighbor_system, u_neighbor_system, neighborhood_search,
+                   system::OpenBoundarySPHSystem, neighbor_system)
+    interact!(dv, v_particle_system, u_particle_system,
+              v_neighbor_system, u_neighbor_system, neighborhood_search,
+              system, neighbor_system, system.transport_velocity)
+end
+
+function interact!(dv, v_particle_system, u_particle_system,
+                   v_neighbor_system, u_neighbor_system, neighborhood_search,
+                   system::OpenBoundarySPHSystem, neighbor_system, ::Nothing)
+    return dv
+end
+
+function interact!(dv, v_particle_system, u_particle_system,
+                   v_neighbor_system, u_neighbor_system, neighborhood_search,
+                   system::OpenBoundarySPHSystem, neighbor_system, ::TransportVelocityAdami)
+    system_coords = current_coordinates(u_particle_system, system)
+    neighbor_coords = current_coordinates(u_neighbor_system, neighbor_system)
+
+    # Loop over all pairs of particles and neighbors within the kernel cutoff.
+    foreach_point_neighbor(system, neighbor_system, system_coords, neighbor_coords,
+                           neighborhood_search) do particle, neighbor, pos_diff, distance
+        # Only consider particles with a distance > 0.
+        distance < sqrt(eps()) && return
+
+        rho_a = particle_density(v_particle_system, system, particle)
+        rho_b = particle_density(v_neighbor_system, neighbor_system, neighbor)
+
+        m_a = hydrodynamic_mass(system, particle)
+        m_b = hydrodynamic_mass(neighbor_system, neighbor)
+
+        V_a = m_a / rho_a
+        V_b = m_b / rho_b
+
+        p_b = system.transport_velocity.background_pressure
+
+        grad_kernel = smoothing_kernel_grad(system.fluid_system, pos_diff, distance)
+
+        # This vanishes for uniform particle distributions
+        dv_repulsive_pressure = -(2 / m_a) * V_a * V_b * p_b * grad_kernel
+
+        for i in 1:ndims(system)
+            dv[i, particle] += dv_repulsive_pressure[i]
+        end
+    end
+
+    return dv
+end
+
 # This is the derivative of the density summation, which is compatible with the
 # `SummationDensity` pressure acceleration.
 # Energy preservation tests will fail with the other formulation.

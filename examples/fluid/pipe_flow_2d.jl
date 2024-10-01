@@ -18,7 +18,7 @@ open_boundary_layers = 8
 
 # ==========================================================================================
 # ==== Experiment Setup
-tspan = (0.0, 2.0)
+tspan = (0.0, 5.0)
 
 # Boundary geometry and initial fluid particle positions
 domain_size = (1.0, 0.4)
@@ -34,9 +34,9 @@ fluid_density = 1000.0
 
 # For this particular example, it is necessary to have a background pressure.
 # Otherwise the suction at the outflow is to big and the simulation becomes unstable.
-pressure = 0.0
+pressure = 1000.0
 
-sound_speed = 20 * prescribed_velocity
+sound_speed = 10 * prescribed_velocity
 
 state_equation = nothing
 
@@ -62,6 +62,7 @@ viscosity = ViscosityAdami(nu=kinematic_viscosity)
 
 fluid_system = EntropicallyDampedSPHSystem(pipe.fluid, smoothing_kernel, smoothing_length,
                                            sound_speed, viscosity=viscosity,
+                                           transport_velocity=TransportVelocityAdami(pressure),
                                            density_calculator=fluid_density_calculator,
                                            buffer_size=n_buffer_particles)
 
@@ -82,6 +83,10 @@ function velocity_function(pos, t)
     # Use this for a time-dependent inflow velocity
     # return SVector(0.5prescribed_velocity * sin(2pi * t) + prescribed_velocity, 0)
 
+    # if t < 1.0
+    #     return SVector(t * prescribed_velocity, 0.0)
+    # end
+
     return SVector(prescribed_velocity, 0.0)
 end
 
@@ -92,6 +97,7 @@ inflow = BoundaryZone(; plane=([0.0, 0.0], [0.0, domain_size[2]]),
 open_boundary_in = OpenBoundarySPHSystem(inflow; fluid_system,
                                          boundary_model=BoundaryModelTafuni(),
                                          buffer_size=n_buffer_particles,
+                                         transport_velocity=TransportVelocityAdami(pressure),
                                          reference_velocity=velocity_function)
 
 outflow = BoundaryZone(; plane=([domain_size[1], 0.0], [domain_size[1], domain_size[2]]),
@@ -101,6 +107,7 @@ outflow = BoundaryZone(; plane=([domain_size[1], 0.0], [domain_size[1], domain_s
 open_boundary_out = OpenBoundarySPHSystem(outflow; fluid_system,
                                           boundary_model=BoundaryModelTafuni(),
                                           buffer_size=n_buffer_particles,
+                                          transport_velocity=TransportVelocityAdami(pressure),
                                           # reference_velocity=velocity_function,
                                           reference_pressure=pressure)
 
