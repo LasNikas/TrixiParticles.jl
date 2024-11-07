@@ -1,10 +1,11 @@
 struct ParticleRefinement{SP, ELTYPE}
-    splitting_pattern :: SP
-    max_spacing_ratio :: ELTYPE
-    mass_ref          :: Vector{ELTYPE}
-    merge_candidates  :: Vector{ELTYPE} # length = nparticles
-    split_candidates  :: Vector{ELTYPE} # length = nparticles
-    delete_candidates :: Vector{Bool} # length = nparticles
+    splitting_pattern         :: SP
+    max_spacing_ratio         :: ELTYPE
+    mass_ref                  :: Vector{ELTYPE}
+    merge_candidates          :: Vector{ELTYPE} # length = nparticles
+    split_candidates          :: Vector{ELTYPE} # length = nparticles
+    delete_candidates         :: Vector{Bool} # length = nparticles
+    n_particles_before_resize :: Int
 end
 
 function refinement!(semi, v_ode, u_ode, v_tmp, u_tmp, t)
