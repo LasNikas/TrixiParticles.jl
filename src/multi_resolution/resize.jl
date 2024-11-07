@@ -2,21 +2,17 @@ function resize!(semi::Semidiscretization, v_ode, u_ode, _v_ode, _u_ode)
     copyto!(_v_ode, v_ode)
     copyto!(_u_ode, u_ode)
 
-    capacity_global = 0
-
     # Resize all systems
     foreach_system(semi) do system
-        capacity_system = capacity(system)
-
-        resize!(system, capacity_system)
-
-        capacity_global += capacity_system
+        resize!(system, capacity(system))
     end
 
     ranges_v_old = semi.ranges_v
     ranges_u_old = semi.ranges_u
 
     ranges_v_new, ranges_u_new = ranges_vu(semi.systems)
+
+    capacity_global = sum(system -> capacity(system), semi.systems)
 
     resize!(v_ode, capacity_global)
     resize!(u_ode, capacity_global)
@@ -32,7 +28,6 @@ function resize!(semi::Semidiscretization, v_ode, u_ode, _v_ode, _u_ode)
             v_ode[ranges_v_new[i][1] + j] = _v_ode[ranges_v_old[i][1] + j]
         end
     end
-
 
     # Set ranges after resizing the systems
     for i in 1:length(semi.systems)
@@ -102,5 +97,5 @@ end
 @inline capacity(system, ::Nothing) = nparticles(system)
 
 @inline function capacity(system, particle_refinement)
-    return sum(particle_refinement.split_candidates) + nparticles(system)
+    return particle_refinement.n_new_particles + nparticles(system)
 end
