@@ -1,8 +1,21 @@
-struct ParticleRefinement{SP}
-    splitting_pattern :: SP
+struct ParticleRefinement{SP, ELTYPE}
+    splitting_pattern       :: SP
+    particle_spacing_min    :: ELTYPE
+    smoothing_length_factor :: Vector{ELTYPE}
 end
 
+function initialize!(particle_refinement, semi)
+    (; particle_spacing_min) = particle_refinement
 
+    particle_spacing_min = zero(eltype(particle_refinement))
+
+    foreach_system(semi) do system
+        (; particle_spacing) = system.inital_condition
+        particle_spacing_min[] = min(particle_spacing_min, particle_spacing)
+    end
+
+    return particle_refinement
+end
 
 function refinement!(semi, v_ode, u_ode, v_tmp, u_tmp, t)
     # check refnement criteria
@@ -33,4 +46,7 @@ function refinement!(semi, v_ode, u_ode, v_tmp, u_tmp, t)
     end
 
     return semi
+end
+
+function update_particle_spacing()
 end
