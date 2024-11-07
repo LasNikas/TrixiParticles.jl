@@ -3,6 +3,7 @@ struct ParticleRefinement{SP, ELTYPE}
     max_spacing_ratio :: ELTYPE
     mass_ref          :: Vector{ELTYPE}
     merge_candidates  :: Vector{ELTYPE} # length = nparticles
+    split_candidates  :: Vector{ELTYPE} # length = nparticles
     delete_candidates :: Vector{Bool} # length = nparticles
 end
 
