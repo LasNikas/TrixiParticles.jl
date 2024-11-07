@@ -1,39 +1,59 @@
 function resize!(semi::Semidiscretization, v_ode, u_ode, _v_ode, _u_ode)
-    copyto!(_v_ode, v_ode)
-    copyto!(_u_ode, u_ode)
-
     # Resize all systems
     foreach_system(semi) do system
         resize!(system, capacity(system))
     end
 
-    ranges_v_old = semi.ranges_v
-    ranges_u_old = semi.ranges_u
+    resize!(v_ode, u_ode, _v_ode, _u_ode, semi)
 
+    return semi
+end
+
+function deleteat!(semi::Semidiscretization, v_ode, u_ode, _v_ode, _u_ode)
+    # Delete at specific indices
+    foreach_system(semi) do system
+        v = wrap_v(v_ode, system, semi)
+        u = wrap_u(u_ode, system, semi)
+        deleteat!(system, v, u)
+    end
+
+    resize!(v_ode, u_ode, _v_ode, _u_ode, semi)
+
+    return semi
+end
+
+function resize!(v_ode, u_ode, _v_ode, _u_ode, semi::Semidiscretization)
+    copyto!(_v_ode, v_ode)
+    copyto!(_u_ode, u_ode)
+
+    # Get ranges after resizing the systems
     ranges_v_new, ranges_u_new = ranges_vu(semi.systems)
 
-    capacity_global = sum(system -> capacity(system), semi.systems)
-
-    resize!(v_ode, capacity_global)
-    resize!(u_ode, capacity_global)
-
-    for i in eachindex(ranges_u_old)
-        old_length_u = length(ranges_u_old[i])
-        for j in 1:old_length_u
-            u_ode[ranges_u_new[i][1] + j] = _u_ode[ranges_u_old[i][1] + j]
-        end
-
-        old_length_v = length(ranges_v_old[i])
-        for j in 1:old_length_v
-            v_ode[ranges_v_new[i][1] + j] = _v_ode[ranges_v_old[i][1] + j]
-        end
-    end
+    ranges_v_old = semi.ranges_v
+    ranges_u_old = semi.ranges_u
 
     # Set ranges after resizing the systems
     for i in 1:length(semi.systems)
         semi.ranges_v[i] = ranges_v_new[i]
-        semi.ranges_u[i] = ranges_u_old[i]
+        semi.ranges_u[i] = ranges_u_new[i]
     end
+
+    for i in eachindex(ranges_u_old)
+        length_u = min(length(ranges_u_old[i]), length(ranges_u_new[i]))
+        for j in 1:length_u
+            u_ode[ranges_u_new[i][1] + j] = _u_ode[ranges_u_old[i][1] + j]
+        end
+
+        length_v = min(length(ranges_v_old[i]), length(ranges_v_new[i]))
+        for j in 1:length_v
+            v_ode[ranges_v_new[i][1] + j] = _v_ode[ranges_v_old[i][1] + j]
+        end
+    end
+
+    capacity_global = sum(system -> nparticles(system), semi.systems)
+
+    resize!(v_ode, capacity_global)
+    resize!(u_ode, capacity_global)
 
     resize!(_v_ode, capacity_global)
     resize!(_u_ode, capacity_global)
@@ -43,8 +63,7 @@ function resize!(semi::Semidiscretization, v_ode, u_ode, _v_ode, _u_ode)
 
     # # Tell OrdinaryDiffEq that u has been modified
     # u_modified!(integrator, true)
-
-    return semi
+    return v_ode
 end
 
 resize!(system, capacity_system) = system
@@ -73,7 +92,7 @@ function resize!(system::EntropicallyDampedSPHSystem, refinement, capacity_syste
 
     resize!(mass, capacity_system)
     resize_density!(system, capacity_system, density_calculator)
-    resize_cache!(system, cache, capacity_system)
+    resize_cache!(system, capacity_system)
 
     return system
 end
@@ -89,66 +108,10 @@ end
 
 function resize_cache!(system::EntropicallyDampedSPHSystem, n)
     resize!(system.cache.smoothing_length, n)
-    resize!(system.cache.pressure_average)
-    resize!(system.cache.neighbor_counter)
+    resize!(system.cache.pressure_average, n)
+    resize!(system.cache.neighbor_counter, n)
 
     return system
-end
-
-@inline capacity(system) = capacity(system, system.particle_refinement)
-
-@inline capacity(system, ::Nothing) = nparticles(system)
-
-@inline function capacity(system, particle_refinement)
-    return particle_refinement.n_new_particles + nparticles(system)
-end
-
-function deleteat!(semi::Semidiscretization, v_ode, u_ode, _v_ode, _u_ode)
-    copyto!(_v_ode, v_ode)
-    copyto!(_u_ode, u_ode)
-
-    foreach_system(semi) do system
-        v = wrap_v(v_ode, system, semi)
-        u = wrap_u(u_ode, system, semi)
-        deleteat!(system, v, u)
-    end
-
-    ranges_v_old = semi.ranges_v
-    ranges_u_old = semi.ranges_u
-
-    ranges_v_new, ranges_u_new = ranges_vu(semi.systems)
-
-    for i in eachindex(ranges_u_old)
-        new_length_u = length(ranges_u_new[i])
-        for j in 1:new_length_u
-            u_ode[ranges_u_new[i][1] + j] = _u_ode[ranges_u_old[i][1] + j]
-        end
-
-        new_length_v = length(ranges_v_new[i])
-        for j in 1:new_length_v
-            v_ode[ranges_v_new[i][1] + j] = _v_ode[ranges_v_old[i][1] + j]
-        end
-    end
-
-    capacity_global = sum(system -> nparticles(system), semi.systems)
-
-    resize!(v_ode, capacity_global)
-    resize!(u_ode, capacity_global)
-
-    # Set ranges after resizing the systems
-    for i in 1:length(semi.systems)
-        semi.ranges_v[i] = ranges_v_new[i]
-        semi.ranges_u[i] = ranges_u_old[i]
-    end
-
-    resize!(_v_ode, capacity_global)
-    resize!(_u_ode, capacity_global)
-
-    # TODO: Do the following in the callback
-    # resize!(integrator, (length(v_ode), length(u_ode)))
-
-    # # Tell OrdinaryDiffEq that u has been modified
-    # u_modified!(integrator, true)
 end
 
 deleteat!(system, v, u) = system
@@ -159,14 +122,12 @@ end
 
 deleteat!(system, ::Nothing, v, u) = system
 
-function deleteat!(system::WeaklyCompressibleSPHSystem, refinement, v, u)
-    (; mass, pressure, cache, density_calculator) = system
+function deleteat!(system::FluidSystem, refinement, v, u)
     (; delete_candidates) = refinement
-
 
     delete_counter = 0
 
-    for particle in eachparticl(system)
+    for particle in eachparticle(system)
         if !iszero(delete_candidates[particle])
             # swap particles (keep -> delete)
             dump_id = nparticles(system) - delete_counter
@@ -189,7 +150,6 @@ function deleteat!(system::WeaklyCompressibleSPHSystem, refinement, v, u)
             for dim in 1:ndims(system)
                 v[dim, particle] = vel_keep[dim]
                 u[dim, particle] = pos_keep[dim]
-                v[dim, ]
             end
 
             delete_counter += 1
@@ -199,4 +159,12 @@ function deleteat!(system::WeaklyCompressibleSPHSystem, refinement, v, u)
     resize!(system, nparticles(system) - delete_counter)
 
     return system
+end
+
+@inline capacity(system) = capacity(system, system.particle_refinement)
+
+@inline capacity(system, ::Nothing) = nparticles(system)
+
+@inline function capacity(system, particle_refinement)
+    return particle_refinement.n_new_particles + nparticles(system)
 end
