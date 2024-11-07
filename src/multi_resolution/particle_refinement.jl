@@ -1,6 +1,7 @@
 struct ParticleRefinement{SP, ELTYPE}
-    splitting_pattern       :: SP
-    max_spacing_ratio       :: ELTYPE
+    splitting_pattern :: SP
+    max_spacing_ratio :: ELTYPE
+    mass_ref          :: Vector{ELTYPE}
 end
 
 function refinement!(semi, v_ode, u_ode, v_tmp, u_tmp, t)
@@ -50,9 +51,9 @@ end
 end
 
 function update_particle_spacing(semi::Semidiscretization, u_ode)
-    foreach_system(semi) do particle_system
-        u_particle_system = wrap_u(u_ode, particle_system, semi)
-        update_particle_spacing(particle_system, u_particle_system, semi)
+    foreach_system(semi) do system
+        u = wrap_u(u_ode, system, semi)
+        update_particle_spacing(system, u, semi)
     end
 end
 
@@ -60,6 +61,8 @@ end
 
 @inline function update_particle_spacing(system::FluidSystem, u, semi)
     (; smoothing_length, smoothing_length_factor) = system.cache
+    (; mass_ref) = system.particle_refinement
+
     system_coords = current_coordinates(u, system)
 
     for particle in eachparticle(system)
@@ -72,7 +75,7 @@ end
         end
 
         smoothing_length[particle] = smoothing_length_factor * new_spacing
-        system.mass[particle] = system.density[particle] * new_spacing^(ndims(system))
+        mass_ref[particle] = system.density[particle] * new_spacing^(ndims(system))
     end
 
     return system
