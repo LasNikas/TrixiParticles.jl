@@ -14,9 +14,10 @@ function vtk2trixi(file)
     field_data = ReadVTK.get_field_data(vtk_file)
 
     # Retrieve fields
-    ndims = ReadVTK.get_data(field_data["ndims"])
-    particle_spacing = ReadVTK.get_data(field_data["particle_spacing"])
-    coordinates = ReadVTK.get_points(vtk_file)[1:ndims[1], :]
+    ndims = first(ReadVTK.get_data(field_data["ndims"]))
+    particle_spacing = first(ReadVTK.get_data(field_data["particle_spacing"]))
+
+    coordinates = ReadVTK.get_points(vtk_file)[1:ndims, :]
 
     fields = ["velocity", "density", "pressure", "mass"]
     results = Dict{String, Array{Float64}}()
