@@ -1,10 +1,10 @@
 """
     vtk2trixi(file::String)
 
-Convert data from VTK-file to InitialCondition 
+Convert data from VTK-file to InitialCondition
 
 # Arguments
-- `file`: Name of the file to be loaded. 
+- `file`: Name of the file to be loaded.
 """
 function vtk2trixi(file)
     vtk_file = ReadVTK.VTKFile(file)
@@ -15,6 +15,7 @@ function vtk2trixi(file)
 
     # Retrieve fields
     ndims = ReadVTK.get_data(field_data["ndims"])
+    particle_spacing = ReadVTK.get_data(field_data["particle_spacing"])
     coordinates = ReadVTK.get_points(vtk_file)[1:ndims[1], :]
 
     fields = ["velocity", "density", "pressure", "mass"]
@@ -41,7 +42,7 @@ function vtk2trixi(file)
     end
 
     return InitialCondition(
-                            ; coordinates,
+                            ; coordinates, particle_spacing=particle_spacing,
                             velocity=results["velocity"],
                             mass=results["mass"],
                             density=results["density"],
