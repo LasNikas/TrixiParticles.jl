@@ -50,7 +50,7 @@ trixi2vtk(sol.u[end], semi, 0.0, iter=1, my_custom_quantity=kinetic_energy)
 """
 function trixi2vtk(vu_ode, semi, t; iter=nothing, output_directory="out", prefix="",
                    write_meta_data=true, git_hash=compute_git_hash(),
-                   max_coordinates=Inf, custom_quantities...)
+                   write_summation_density=false, max_coordinates=Inf, custom_quantities...)
     (; systems) = semi
     v_ode, u_ode = vu_ode.x
 
@@ -68,7 +68,14 @@ function trixi2vtk(vu_ode, semi, t; iter=nothing, output_directory="out", prefix
         u = wrap_u(u_ode, system, semi)
         periodic_box = get_neighborhood_search(system, semi).periodic_box
 
-        trixi2vtk(v, u, t, system, periodic_box;
+        if write_summation_density
+            summation_density = zeros(nparticles(system))
+            summation_density!(system, semi, u, u_ode, summation_density)
+        else
+            summation_density = nothing
+        end
+
+        trixi2vtk(v, u, t, system, periodic_box; summation_density,
                   system_name=filenames[system_index], output_directory, iter, prefix,
                   write_meta_data, git_hash, max_coordinates, custom_quantities...)
     end
@@ -78,7 +85,7 @@ end
 function trixi2vtk(v_, u_, t, system_, periodic_box; output_directory="out", prefix="",
                    iter=nothing, system_name=vtkname(system_), write_meta_data=true,
                    max_coordinates=Inf, git_hash=compute_git_hash(),
-                   custom_quantities...)
+                   summation_density=nothing, custom_quantities...)
     mkpath(output_directory)
 
     # Skip empty systems
@@ -137,6 +144,10 @@ function trixi2vtk(v_, u_, t, system_, periodic_box; output_directory="out", pre
             if value !== nothing
                 vtk[string(key)] = value
             end
+        end
+
+        if !isnothing(summation_density)
+            vtk["summation_density"] = summation_density
         end
 
         # Add to collection

@@ -66,22 +66,24 @@ saving_callback = SolutionSavingCallback(dt=0.1, my_custom_quantity=kinetic_ener
 ```
 """
 mutable struct SolutionSavingCallback{I, CQ}
-    interval              :: I
-    save_times            :: Array{Float64, 1}
-    save_initial_solution :: Bool
-    save_final_solution   :: Bool
-    write_meta_data       :: Bool
-    verbose               :: Bool
-    output_directory      :: String
-    prefix                :: String
-    max_coordinates       :: Float64
-    custom_quantities     :: CQ
-    latest_saved_iter     :: Int
-    git_hash              :: Ref{String}
+    interval                :: I
+    save_times              :: Array{Float64, 1}
+    save_initial_solution   :: Bool
+    save_final_solution     :: Bool
+    write_meta_data         :: Bool
+    write_summation_density :: Bool
+    verbose                 :: Bool
+    output_directory        :: String
+    prefix                  :: String
+    max_coordinates         :: Float64
+    custom_quantities       :: CQ
+    latest_saved_iter       :: Int
+    git_hash                :: Ref{String}
 end
 
 function SolutionSavingCallback(; interval::Integer=0, dt=0.0,
                                 save_times=Array{Float64, 1}([]),
+                                write_summation_density=false,
                                 save_initial_solution=true, save_final_solution=true,
                                 output_directory="out", append_timestamp=false,
                                 prefix="", verbose=false, write_meta_data=true,
@@ -101,8 +103,9 @@ function SolutionSavingCallback(; interval::Integer=0, dt=0.0,
 
     solution_callback = SolutionSavingCallback(interval, save_times,
                                                save_initial_solution, save_final_solution,
-                                               write_meta_data, verbose, output_directory,
-                                               prefix, max_coordinates, custom_quantities,
+                                               write_meta_data, write_summation_density,
+                                               verbose, output_directory, prefix,
+                                               max_coordinates, custom_quantities,
                                                -1, Ref("UnknownVersion"))
 
     if length(save_times) > 0
@@ -160,7 +163,8 @@ end
 # `affect!`
 function (solution_callback::SolutionSavingCallback)(integrator)
     (; interval, output_directory, custom_quantities, write_meta_data, git_hash,
-    verbose, prefix, latest_saved_iter, max_coordinates) = solution_callback
+    verbose, prefix, latest_saved_iter,
+    max_coordinates, write_summation_density) = solution_callback
 
     vu_ode = integrator.u
     semi = integrator.p
@@ -183,6 +187,7 @@ function (solution_callback::SolutionSavingCallback)(integrator)
 
     @trixi_timeit timer() "save solution" trixi2vtk(vu_ode, semi, integrator.t;
                                                     iter, output_directory, prefix,
+                                                    write_summation_density,
                                                     write_meta_data, git_hash=git_hash[],
                                                     max_coordinates, custom_quantities...)
 

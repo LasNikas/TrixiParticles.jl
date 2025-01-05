@@ -264,6 +264,10 @@ function (pp::PostprocessCallback)(integrator)
 
             add_entry!(pp, "density_max", t, maximum(density), filenames[system_index])
             add_entry!(pp, "density_min", t, minimum(density), filenames[system_index])
+
+            l_inf = maximum(abs.(density - system.initial_condition.density))
+            add_entry!(pp, "l_inf", t, l_inf, filenames[system_index])
+
             new_data = true
         end
     end
