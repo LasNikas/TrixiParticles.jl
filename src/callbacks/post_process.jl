@@ -261,7 +261,9 @@ function (pp::PostprocessCallback)(integrator)
         if pp.write_summation_density
             density = zeros(nparticles(system))
             summation_density!(system, semi, u, u_ode, density)
-            add_entry!(pp, "summation_density", t, density, filenames[system_index])
+
+            add_entry!(pp, "density_max", t, maximum(density), filenames[system_index])
+            add_entry!(pp, "density_min", t, minimum(density), filenames[system_index])
             new_data = true
         end
     end
