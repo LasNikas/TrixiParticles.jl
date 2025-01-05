@@ -62,22 +62,24 @@ postprocess_callback = PostprocessCallback(dt=0.1, example_quantity=kinetic_ener
 ```
 """
 struct PostprocessCallback{I, F}
-    interval            :: I
-    write_file_interval :: Int
-    data                :: Dict{String, Vector{Any}}
-    times               :: Array{Float64, 1}
-    exclude_boundary    :: Bool
-    func                :: F
-    filename            :: String
-    output_directory    :: String
-    append_timestamp    :: Bool
-    write_csv           :: Bool
-    write_json          :: Bool
-    git_hash            :: Ref{String}
+    interval                :: I
+    write_file_interval     :: Int
+    write_summation_density :: Bool
+    data                    :: Dict{String, Vector{Any}}
+    times                   :: Array{Float64, 1}
+    exclude_boundary        :: Bool
+    func                    :: F
+    filename                :: String
+    output_directory        :: String
+    append_timestamp        :: Bool
+    write_csv               :: Bool
+    write_json              :: Bool
+    git_hash                :: Ref{String}
 end
 
 function PostprocessCallback(; interval::Integer=0, dt=0.0, exclude_boundary=true,
                              output_directory="out", filename="values",
+                             write_summation_density=false,
                              append_timestamp=false, write_csv=true, write_json=true,
                              write_file_interval::Integer=1, funcs...)
     if isempty(funcs)
@@ -93,6 +95,7 @@ function PostprocessCallback(; interval::Integer=0, dt=0.0, exclude_boundary=tru
     end
 
     post_callback = PostprocessCallback(interval, write_file_interval,
+                                        write_summation_density,
                                         Dict{String, Vector{Any}}(), Float64[],
                                         exclude_boundary, funcs, filename, output_directory,
                                         append_timestamp, write_csv, write_json,
@@ -253,6 +256,13 @@ function (pp::PostprocessCallback)(integrator)
                 add_entry!(pp, string(key), t, result, filenames[system_index])
                 new_data = true
             end
+        end
+
+        if pp.write_summation_density
+            density = zeros(nparticles(system))
+            summation_density!(system, semi, u, u_ode, density)
+            add_entry!(pp, "summation_density", t, density, filenames[system_index])
+            new_data = true
         end
     end
 
