@@ -213,3 +213,11 @@ function unique_sorted(vertices)
 
     return vertices_sorted[keep]
 end
+
+function volume(mesh::TriangleMesh)
+    volume = sum(mesh.face_vertices) do vertices
+        return dot(vertices[1], cross(vertices[2], vertices[3])) / 6
+    end
+
+    return volume
+end
