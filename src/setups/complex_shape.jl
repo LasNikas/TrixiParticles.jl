@@ -64,6 +64,8 @@ function ComplexShape(geometry; particle_spacing, density,
 
     coordinates = stack(grid[inpoly])
 
+    isnothing(mass) && mass .= density * volume(geometry) / size(coordinates, 2)
+
     initial_condition = InitialCondition(; coordinates, density, mass, velocity, pressure,
                                          particle_spacing)
 
