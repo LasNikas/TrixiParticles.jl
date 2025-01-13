@@ -79,11 +79,7 @@ struct ParticlePackingSystem{NDIMS, ELTYPE <: Real, IC, K,
         shift_condition = if is_boundary
             -boundary_compress_factor * signed_distance_field.max_signed_distance
         else
-            tlsph ? zero(ELTYPE) : shape.particle_spacing / 2
-        end
-
-        if tlsph == false
-            shape = remove_particles_close_to_surface(shape, signed_distance_field, nhs)
+            tlsph ? zero(ELTYPE) : 0.5shape.particle_spacing
         end
 
         return new{NDIMS, ELTYPE, typeof(shape), typeof(smoothing_kernel),
@@ -281,51 +277,4 @@ end
     end
 
     return du
-end
-
-function remove_particles_close_to_surface(shape, signed_distance_field, nhs)
-    (; positions, distances) = signed_distance_field
-
-    smoothing_kernel = SchoenbergCubicSplineKernel{ndims(shape)}()
-    smoothing_length = 1.2 * shape.particle_spacing
-    search_radius2 = compact_support(smoothing_kernel, smoothing_length)^2
-
-    keep_particles = fill(true, nparticles(shape))
-
-    @threaded shape for particle in eachparticle(shape)
-        particle_position = current_coords(shape.coordinates, shape, particle)
-
-        volume = zero(eltype(shape))
-        distance_signed = zero(eltype(shape))
-
-        # Interpolate signed distances and normals
-        for neighbor in PointNeighbors.eachneighbor(particle_position, nhs)
-            pos_diff = positions[neighbor] - particle_position
-            distance2 = dot(pos_diff, pos_diff)
-            distance2 > search_radius2 && continue
-
-            distance = sqrt(distance2)
-            kernel_weight = kernel(smoothing_kernel, distance, smoothing_length)
-
-            distance_signed += distances[neighbor] * kernel_weight
-
-            volume += kernel_weight
-        end
-
-        if volume > eps()
-            distance_signed /= volume
-            if distance_signed > -shape.particle_spacing / 2
-                keep_particles[particle] = false
-            end
-        end
-    end
-
-    coordinates = shape.coordinates[:, keep_particles]
-    velocity = shape.velocity[:, keep_particles]
-    mass = shape.mass[keep_particles]
-    density = shape.density[keep_particles]
-    pressure = shape.pressure[keep_particles]
-
-    return InitialCondition{ndims(shape)}(coordinates, velocity, mass, density, pressure,
-                                          shape.particle_spacing)
 end
