@@ -1,6 +1,7 @@
-mutable struct FaceNeighborhoodSearch{NDIMS, CL, ELTYPE} <:
-               PointNeighbors.AbstractNeighborhoodSearch
+struct FaceNeighborhoodSearch{NDIMS, CL, ELTYPE} <:
+       PointNeighbors.AbstractNeighborhoodSearch
     cell_list     :: CL
+    neighbors     :: CL
     search_radius :: ELTYPE
     periodic_box  :: Nothing # Required by internals of PointNeighbors.jl
     n_cells       :: NTuple{NDIMS, Int}
@@ -11,8 +12,10 @@ function FaceNeighborhoodSearch{NDIMS}(; search_radius,
                                        cell_list=PointNeighbors.DictionaryCellList{NDIMS}()) where {NDIMS}
     cell_size = ntuple(_ -> search_radius, Val(NDIMS))
     n_cells = ntuple(_ -> -1, Val(NDIMS))
+    neighbors = PointNeighbors.copy_cell_list(cell_list, search_radius, nothing)
 
-    return FaceNeighborhoodSearch(cell_list, search_radius, nothing, n_cells, cell_size)
+    return FaceNeighborhoodSearch(cell_list, neighbors, search_radius, nothing, n_cells,
+                                  cell_size)
 end
 
 @inline Base.ndims(::FaceNeighborhoodSearch{NDIMS}) where {NDIMS} = NDIMS
@@ -24,12 +27,12 @@ end
 @inline eachneighbor(coords, nhs::TrivialNeighborhoodSearch) = nhs.eachpoint
 @inline function eachneighbor(coords, neighborhood_search::FaceNeighborhoodSearch)
     cell = PointNeighbors.cell_coords(coords, neighborhood_search)
-    return faces_in_cell(cell, neighborhood_search)
+    return neighborhood_search.neighbors[cell]
 end
 
 function initialize!(neighborhood_search::FaceNeighborhoodSearch, geometry;
                      pad=ntuple(_ -> 1, ndims(geometry)))
-    (; cell_list, search_radius) = neighborhood_search
+    (; cell_list, neighbors) = neighborhood_search
 
     empty!(cell_list)
 
@@ -37,16 +40,14 @@ function initialize!(neighborhood_search::FaceNeighborhoodSearch, geometry;
     for face in eachface(geometry)
 
         # Check if any face intersects a cell in the face-embedding cell grid
-        for cell in intersecting_cells(face, geometry, neighborhood_search)
-            if cell_intersection(face, geometry, Tuple(cell), neighborhood_search)
+        for cell in bounding_box(face, geometry, neighborhood_search)
+            if face_intersects_cell(face, geometry, Tuple(cell), neighborhood_search)
                 PointNeighbors.push_cell!(cell_list, Tuple(cell), face)
             end
         end
     end
 
-    neighbor_iterator = PointNeighbors.copy_cell_list(cell_list, search_radius, nothing)
-    empty!(neighbor_iterator)
-
+    empty!(neighbors)
     min_cell = PointNeighbors.cell_coords(geometry.min_corner, neighborhood_search) .- pad
     max_cell = PointNeighbors.cell_coords(geometry.max_corner, neighborhood_search) .+ pad
 
@@ -65,17 +66,17 @@ function initialize!(neighborhood_search::FaceNeighborhoodSearch, geometry;
         unique!(face_ids)
 
         for i in face_ids
-            PointNeighbors.push_cell!(neighbor_iterator, Tuple(cell_runner), i)
+            PointNeighbors.push_cell!(neighbors, Tuple(cell_runner), i)
         end
     end
 
-    neighborhood_search.cell_list = deepcopy(neighbor_iterator)
+    empty!(cell_list)
 
     return neighborhood_search
 end
 
-function cell_intersection(face, geometry, cell,
-                           neighborhood_search::FaceNeighborhoodSearch{NDIMS}) where {NDIMS}
+function face_intersects_cell(face, geometry, cell,
+                              neighborhood_search::FaceNeighborhoodSearch{NDIMS}) where {NDIMS}
     (; cell_size) = neighborhood_search
 
     vertices_list = face_vertices(face, geometry)
@@ -86,47 +87,49 @@ function cell_intersection(face, geometry, cell,
     end
 
     # Check if line segments intersect cell
-    min_corner = SVector(cell .* cell_size...)
-    max_corner = min_corner + SVector(cell_size...)
+    min_corner = SVector(cell .* cell_size)
+    max_corner = min_corner .+ cell_size
 
     ray_direction = vertices_list[2] - vertices_list[1]
     ray_origin = vertices_list[1]
 
-    ray_intersection(min_corner, max_corner, ray_origin, ray_direction) && return true
+    ray_intersects_cell(min_corner, max_corner, ray_origin, ray_direction) && return true
 
     if NDIMS == 3
         ray_direction = vertices_list[2] - vertices_list[3]
         ray_origin = vertices_list[3]
 
-        ray_intersection(min_corner, max_corner, ray_origin, ray_direction) && return true
+        ray_intersects_cell(min_corner, max_corner, ray_origin, ray_direction) &&
+            return true
 
         ray_direction = vertices_list[3] - vertices_list[1]
         ray_origin = vertices_list[1]
 
-        ray_intersection(min_corner, max_corner, ray_origin, ray_direction) && return true
+        ray_intersects_cell(min_corner, max_corner, ray_origin, ray_direction) &&
+            return true
 
         # For 3D,  Check if triangle plane intersects cell (for very large triangles)
         normal = face_normal(face, geometry)
 
-        return triangle_plane_intersection(ray_origin, normal, min_corner, cell_size)
+        return plane_intersects_cell(ray_origin, normal, min_corner, cell_size)
     end
 
     return false
 end
 
 # See https://tavianator.com/2022/ray_box_boundary.html
-function ray_intersection(min_corner, max_corner, ray_origin, ray_direction;
-                          pad=sqrt(eps()))
+function ray_intersects_cell(min_corner, max_corner, ray_origin, ray_direction;
+                             pad=sqrt(eps()))
     NDIMS = length(ray_origin)
 
     inv_dir = SVector(ntuple(@inline(dim->1 / ray_direction[dim]), NDIMS))
 
     tmin = zero(eltype(ray_direction))
     tmax = Inf
-    @inbounds for dim in 1:NDIMS
+    for dim in 1:NDIMS
         # `pad` is to handle rays on the boundary
-        t1 = (min_corner[dim] - pad - ray_origin[dim]) * inv_dir[dim]
-        t2 = (max_corner[dim] + pad - ray_origin[dim]) * inv_dir[dim]
+        t1 = @inbounds (min_corner[dim] - pad - ray_origin[dim]) * inv_dir[dim]
+        t2 = @inbounds (max_corner[dim] + pad - ray_origin[dim]) * inv_dir[dim]
 
         tmin = min(max(t1, tmin), max(t2, tmin))
         tmax = max(min(t1, tmax), min(t2, tmax))
@@ -137,8 +140,7 @@ end
 
 # Check if each cell vertex is located on the same side of the plane.
 # Otherwise the plane intersects the cell.
-function triangle_plane_intersection(point_on_plane, plane_normal, cell_min_corner,
-                                     cell_size)
+function plane_intersects_cell(point_on_plane, plane_normal, cell_min_corner, cell_size)
     cell_center = cell_min_corner .+ cell_size ./ 2
 
     # `corner1` is the corner that is furthest in the direction of `plane_normal`.
@@ -159,8 +161,8 @@ function triangle_plane_intersection(point_on_plane, plane_normal, cell_min_corn
     return dot(plane_normal, plane_to_corner1) * dot(plane_normal, plane_to_corner2) < 0
 end
 
-@inline function intersecting_cells(face, geometry,
-                                    neighborhood_search::FaceNeighborhoodSearch{NDIMS}) where {NDIMS}
+@inline function bounding_box(face, geometry,
+                              neighborhood_search::FaceNeighborhoodSearch{NDIMS}) where {NDIMS}
     vertices = face_vertices(face, geometry)
 
     # Compute the cell coordinates for each vertex
