@@ -8,6 +8,7 @@ file = pkgdir(TrixiParticles, "examples", "preprocessing", "data", filename * ".
 # ==== Packing parameters
 save_intervals = false
 tlsph = true
+pack_boundary = true
 
 # ==========================================================================================
 # ==== Resolution
@@ -61,7 +62,8 @@ boundary_system = ParticlePackingSystem(boundary_sampled;
 
 # ==========================================================================================
 # ==== Simulation
-semi = Semidiscretization(packing_system, boundary_system)
+semi = pack_boundary ? Semidiscretization(packing_system, boundary_system) :
+       Semidiscretization(packing_system)
 
 # Use a high `tspan` to guarantee that the simulation runs at least for `maxiters`
 tspan = (0, 10.0)
@@ -83,7 +85,4 @@ sol = solve(ode, RDPK3SpFSAL35();
             save_everystep=false, maxiters=1000, callback=callbacks, dtmax=1e-2)
 
 packed_ic = InitialCondition(sol, packing_system, semi)
-packed_boundary_ic = InitialCondition(sol, boundary_system, semi)
-
-trixi2vtk(packed_ic, filename="initial_condition_packed")
-trixi2vtk(packed_boundary_ic, filename="initial_condition_boundary_packed")
+packed_boundary_ic = pack_boundary ? InitialCondition(sol, boundary_system, semi) : nothing
