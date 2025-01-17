@@ -11,7 +11,7 @@ System to generate body-fitted particles for complex shapes.
 For more information on the methods, see description below.
 
 # Arguments
-- `initial_condition`: [`InitialCondition`](@ref) to be packed.
+- `shape`: [`InitialCondition`](@ref) to be packed.
 
 # Keywords
 - `background_pressure`:   Constant background pressure to physically pack the particles.
@@ -21,12 +21,14 @@ For more information on the methods, see description below.
                            on the boundary of the shape and not half a particle spacing away,
                            as for fluids. When `tlsph=true`, particles will be placed
                            on the boundary of the shape.
-- `is_boundary`:           When `is_boundary=true`, boundary particles will be sampled
-                           and packed in an offset surface of the `boundary`.
-                           The thickness of the boundary is specified by passing the
-                           [`SignedDistanceField`](@ref) of `boundary` with:
+- `is_boundary`:           When `shape` is inside the geometry that was used to create
+                           `signed_distance_field, set `is_boundary=false`.
+                           Otherwise (`shape` is the sampled boundary), set `is_boundary=true`.
+                           The thickness of the boundary is specified by creating
+                           `signed_distance_field` with:
                               - `use_for_boundary_packing=true`
                               - `max_signed_distance=boundary_thickness`
+                           See [`SignedDistanceField`](@ref).
 - `signed_distance_field`: To constrain particles onto the surface, the information about
                            the signed distance from a particle to a face is required.
                            The precalculated signed distances will be interpolated
@@ -45,7 +47,7 @@ struct ParticlePackingSystem{NDIMS, ELTYPE <: Real, IC, K,
     tlsph                 :: Bool
     signed_distance_field :: S
     is_boundary           :: Bool
-    shift_condition       :: ELTYPE
+    shift_length          :: ELTYPE
     neighborhood_search   :: N
     signed_distances      :: Vector{ELTYPE} # Only for visualization
     buffer                :: Nothing
@@ -76,7 +78,15 @@ struct ParticlePackingSystem{NDIMS, ELTYPE <: Real, IC, K,
         # Initialize neighborhood search with signed distances
         PointNeighbors.initialize_grid!(nhs, stack(signed_distance_field.positions))
 
-        shift_condition = if is_boundary
+        # If `distance_signed >= -shift_length`, the particle position is modified
+        # by a surface bounding:
+        # `particle_position -= (distance_signed + shift_length) * normal_vector`,
+        # where `normal_vector` is the normal vector to the surface of the geometry
+        # and `distance_signed` is the level-set value at the particle position,
+        # which means the signed distance to the surface.
+        # Its value is negative if the particle is inside the geometry.
+        # Otherwise (if outside), the value is positive.
+        shift_length = if is_boundary
             -boundary_compress_factor * signed_distance_field.max_signed_distance
         else
             tlsph ? zero(ELTYPE) : 0.5shape.particle_spacing
@@ -86,7 +96,7 @@ struct ParticlePackingSystem{NDIMS, ELTYPE <: Real, IC, K,
                    typeof(signed_distance_field),
                    typeof(nhs)}(shape, smoothing_kernel, smoothing_length,
                                 background_pressure, tlsph, signed_distance_field,
-                                is_boundary, shift_condition, nhs,
+                                is_boundary, shift_length, nhs,
                                 fill(zero(ELTYPE), nparticles(shape)), nothing, false)
     end
 end
@@ -159,10 +169,10 @@ end
     return system.initial_condition.mass[particle]
 end
 
-# Update from `UpdateCallback`
+# Update from `UpdateCallback` (between time steps)
 update_particle_packing(system, v_ode, u_ode, semi, integrator) = system
 
-# Update from `UpdateCallback`
+# Update from `UpdateCallback` (between time steps)
 function update_particle_packing(system::ParticlePackingSystem, v_ode, u_ode,
                                  semi, integrator)
     u = wrap_u(u_ode, system, semi)
@@ -230,11 +240,16 @@ function constrain_particles_onto_surface!(u, system::ParticlePackingSystem)
 end
 
 function constrain_particle!(u, system, particle, distance_signed, normal_vector)
-    (; shift_condition) = system
+    (; shift_length) = system
 
-    if distance_signed >= -shift_condition
+    # For fluid particles:
+    # - `tlsph = true`: `shift_length = 0.0`
+    # - `tlsph = false`: `shift_length = 0.5 * particle_spacing`
+    # For boundary particles:
+    # `shift_length` is the thickness of the boundary.
+    if distance_signed >= -shift_length
         # Constrain outside particles onto surface
-        shift = (distance_signed + shift_condition) * normal_vector
+        shift = (distance_signed + shift_length) * normal_vector
 
         for dim in 1:ndims(system)
             u[dim, particle] -= shift[dim]
@@ -244,10 +259,10 @@ function constrain_particle!(u, system, particle, distance_signed, normal_vector
     system.is_boundary || return u
 
     particle_spacing = system.initial_condition.particle_spacing
-    shift_condition_inner = system.tlsph ? particle_spacing : 0.5 * particle_spacing
+    shift_length_inner = system.tlsph ? particle_spacing : 0.5 * particle_spacing
 
-    if distance_signed < shift_condition_inner
-        shift = (distance_signed - shift_condition_inner) * normal_vector
+    if distance_signed < shift_length_inner
+        shift = (distance_signed - shift_length_inner) * normal_vector
 
         for dim in 1:ndims(system)
             u[dim, particle] -= shift[dim]
@@ -257,7 +272,7 @@ function constrain_particle!(u, system, particle, distance_signed, normal_vector
     return u
 end
 
-# Update from `UpdateCallback`
+# Update from `UpdateCallback` (between time steps)
 @inline function update_transport_velocity!(system::ParticlePackingSystem, v_ode, semi)
     v = wrap_v(v_ode, system, semi)
     @threaded system for particle in each_moving_particle(system)
