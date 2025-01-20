@@ -51,11 +51,18 @@ trixi2vtk(boundary_sampled, filename="boundary")
 # `background_pressure` result in appropriate stepsizes.
 background_pressure = 1e6 * particle_spacing^ndims(geometry)
 
+smoothing_kernel = SchoenbergCubicSplineKernel{ndims(geometry)}()
+smoothing_length = 1.2 * particle_spacing
+
 packing_system = ParticlePackingSystem(shape_sampled;
+                                       smoothing_kernel=smoothing_kernel,
+                                       smoothing_length=smoothing_length,
                                        signed_distance_field, tlsph=tlsph,
                                        background_pressure)
 
 boundary_system = ParticlePackingSystem(boundary_sampled;
+                                        smoothing_kernel=smoothing_kernel,
+                                        smoothing_length=smoothing_length,
                                         is_boundary=true, signed_distance_field,
                                         tlsph=tlsph, boundary_compress_factor=0.8,
                                         background_pressure)
