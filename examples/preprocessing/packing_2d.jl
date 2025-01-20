@@ -86,7 +86,10 @@ saving_callback = save_intervals ?
                   SolutionSavingCallback(interval=10, prefix="", ekin=kinetic_energy) :
                   nothing
 
-callbacks = CallbackSet(UpdateCallback(), saving_callback, info_callback, steady_state)
+pp_callback = nothing
+
+callbacks = CallbackSet(UpdateCallback(), saving_callback, info_callback, steady_state,
+                        pp_callback)
 
 sol = solve(ode, RDPK3SpFSAL35();
             save_everystep=false, maxiters=1000, callback=callbacks, dtmax=1e-2)
