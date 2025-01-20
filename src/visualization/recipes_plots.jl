@@ -73,7 +73,41 @@ RecipesBase.@recipe function f((initial_conditions::InitialCondition)...;
     return (first(initial_conditions), ics...)
 end
 
-RecipesBase.@recipe function f(::Union{InitialCondition, Semidiscretization},
+RecipesBase.@recipe function f((signed_distance_field::SignedDistanceField)...;
+                               xlims=(Inf, Inf), ylims=(Inf, Inf))
+    idx = 0
+    ics = map(signed_distance_field) do sdf
+        positions = stack(sdf.positions)
+        x = collect(positions[1, :])
+        y = collect(positions[2, :])
+
+        particle_spacing = sdf.particle_spacing
+        if particle_spacing < 0
+            particle_spacing = 0.0
+        end
+
+        x_min, y_min = minimum(positions, dims=2) .- 0.5particle_spacing
+        x_max, y_max = maximum(positions, dims=2) .+ 0.5particle_spacing
+
+        # `x_min`, `x_max`, etc. are used to automatically set the marker size.
+        # When `xlims` or `ylims` are passed explicitly, we have to update these to get the correct marker size.
+        isfinite(first(xlims)) && (x_min = xlims[1])
+        isfinite(last(xlims)) && (x_max = xlims[2])
+
+        isfinite(first(ylims)) && (y_min = ylims[1])
+        isfinite(last(ylims)) && (y_max = ylims[2])
+
+        idx += 1
+
+        return (; x, y, x_min, x_max, y_min, y_max, particle_spacing,
+                label="signed distances " * "$idx")
+    end
+
+    return (first(signed_distance_field), ics...)
+end
+
+RecipesBase.@recipe function f(::Union{InitialCondition, SignedDistanceField,
+                                       Semidiscretization},
                                data...; zcolor=nothing, size=(600, 400), colorbar_title="",
                                xlims=(Inf, Inf), ylims=(Inf, Inf))
     x_min = minimum(obj.x_min for obj in data)
