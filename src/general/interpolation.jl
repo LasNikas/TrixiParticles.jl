@@ -657,3 +657,43 @@ end
     return (velocity=velocity, jacobian=jacobian, von_mises_stress=von_mises_stress,
             cauchy_stress=cauchy_stress)
 end
+
+# As defined by Shepard: https://dl.acm.org/doi/pdf/10.1145/800186.810616
+function shepard_interpolate!(interpolated_values, interpolated_positions,
+                              values, value_positions;
+                              smoothing_kernel, smoothing_length)
+    search_radius = compact_support(smoothing_kernel, smoothing_length)
+    search_radius2 = search_radius^2
+
+    coords1 = stack(interpolated_positions)
+    coords2 = stack(value_positions)
+    nhs = GridNeighborhoodSearch{ndims(smoothing_kernel)}(; search_radius,
+                                                          n_points=size(coords2, 2))
+    PointNeighbors.initialize!(nhs, coords1, coords2)
+
+    @threaded interpolated_positions for point in eachindex(interpolated_positions)
+        point_coords = interpolated_positions[point]
+
+        volume = zero(eltype(point_coords))
+        interpolated_value = zero(first(interpolated_values))
+
+        for neighbor in PointNeighbors.eachneighbor(point_coords, nhs)
+            pos_diff = value_positions[neighbor] - point_coords
+            distance2 = dot(pos_diff, pos_diff)
+            distance2 > search_radius2 && continue
+
+            distance = sqrt(distance2)
+            kernel_weight = kernel(smoothing_kernel, distance, smoothing_length)
+
+            interpolated_value += values[neighbor] * kernel_weight
+
+            volume += kernel_weight
+        end
+
+        if volume > eps()
+            interpolated_values[point] = interpolated_value / volume
+        end
+    end
+
+    return interpolated_values
+end
