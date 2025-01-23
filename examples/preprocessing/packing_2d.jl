@@ -21,7 +21,7 @@ boundary_thickness = 8particle_spacing
 
 # ==========================================================================================
 # ==== Load complex geometry
-density = 1000.0
+density = 1.0
 
 geometry = load_geometry(file)
 
@@ -30,15 +30,18 @@ signed_distance_field = SignedDistanceField(geometry, particle_spacing;
                                             max_signed_distance=boundary_thickness)
 
 point_in_geometry_algorithm = WindingNumberJacobson(; geometry,
-                                                    winding_number_factor=0.4,
                                                     hierarchical_winding=true)
 # Returns `InitialCondition`
 shape_sampled = ComplexShape(geometry; particle_spacing, density,
                              point_in_geometry_algorithm)
 
+shape_sampled.mass .= density * TrixiParticles.volume(geometry) /
+                      nparticles(shape_sampled)
+
 # Returns `InitialCondition`
 boundary_sampled = sample_boundary(signed_distance_field; boundary_density=density,
                                    boundary_thickness, tlsph)
+boundary_sampled.mass .= first(boundary_sampled.mass)
 
 trixi2vtk(shape_sampled)
 trixi2vtk(boundary_sampled, filename="boundary")
