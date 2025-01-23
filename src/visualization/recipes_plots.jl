@@ -109,7 +109,7 @@ end
 RecipesBase.@recipe function f(::Union{InitialCondition, SignedDistanceField,
                                        Semidiscretization},
                                data...; zcolor=nothing, size=(600, 400), colorbar_title="",
-                               xlims=(Inf, Inf), ylims=(Inf, Inf))
+                               xlims=(Inf, Inf), ylims=(Inf, Inf), markerstrokewidth=0)
     x_min = minimum(obj.x_min for obj in data)
     x_max = maximum(obj.x_max for obj in data)
 
@@ -149,7 +149,7 @@ RecipesBase.@recipe function f(::Union{InitialCondition, SignedDistanceField,
                 pixels_per_particle = obj.particle_spacing / pixel_size
 
                 # Marker radius in pixels
-                markersize --> 0.5 * pixels_per_particle
+                markersize --> 0.5 * pixels_per_particle - markerstrokewidth / 2
             end
 
             label --> obj.label
