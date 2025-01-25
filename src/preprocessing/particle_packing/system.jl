@@ -99,9 +99,10 @@ struct ParticlePackingSystem{S, F, NDIMS, ELTYPE <: Real,
         # Its value is negative if the particle is inside the geometry.
         # Otherwise (if outside), the value is positive.
         shift_length = if is_boundary
-            -boundary_compress_factor * signed_distance_field.max_signed_distance
+            offset = tlsph ? shape.particle_spacing : shape.particle_spacing / 2
+            -boundary_compress_factor * signed_distance_field.max_signed_distance - offset
         else
-            tlsph ? zero(ELTYPE) : 0.5shape.particle_spacing
+            tlsph ? zero(ELTYPE) : shape.particle_spacing / 2
         end
 
         return new{typeof(signed_distance_field), fixed_system, NDIMS, ELTYPE,
