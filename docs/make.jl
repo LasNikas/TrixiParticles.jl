@@ -2,6 +2,7 @@ using Documenter, DocumenterCitations
 using TrixiParticles
 using TrixiBase
 using PointNeighbors
+using Asciicast: Asciicast
 
 # Get TrixiParticles.jl root directory
 trixiparticles_root_dir = dirname(@__DIR__)
@@ -19,9 +20,12 @@ function copy_file(filename, replaces...;
     content = read(source_path, String)
     content = replace(content, replaces...)
 
+    # Use `replace` to make sure the path uses forward slashes for URLs
+    filename_url = replace(filename, "\\" => "/")
+
     header = """
     ```@meta
-    EditURL = "https://github.com/trixi-framework/TrixiParticles.jl/blob/main/$filename"
+    EditURL = "https://github.com/trixi-framework/TrixiParticles.jl/blob/main/$filename_url"
     ```
     """
     content = header * content
@@ -97,13 +101,18 @@ copy_file("NEWS.md")
 # Define module-wide setups such that the respective modules are available in doctests
 DocMeta.setdocmeta!(TrixiParticles, :DocTestSetup, :(using TrixiParticles); recursive=true)
 
+# Define environment variables to create plots without warnings
+# https://discourse.julialang.org/t/test-plots-on-travis-gks-cant-open-display/9465/2
+ENV["PLOTS_TEST"] = "true"
+ENV["GKSwstype"] = "100"
+
 bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
 makedocs(sitename="TrixiParticles.jl",
          plugins=[bib],
          # Run doctests and check docs for the following modules
          modules=[TrixiParticles],
-         format=Documenter.HTML(),
+         format=Documenter.HTML(; assets=Asciicast.assets()),
          # Explicitly specify documentation structure
          pages=[
              "Home" => "index.md",
@@ -117,7 +126,8 @@ makedocs(sitename="TrixiParticles.jl",
              "Preprocessing" => [
                  "Sampling of Geometries" => joinpath("preprocessing", "preprocessing.md")
              ],
-             "Components" => [
+             "GPU Support" => "gpu.md",
+             "API Reference" => [
                  "Overview" => "overview.md",
                  "General" => [
                      "Semidiscretization" => joinpath("general", "semidiscretization.md"),
