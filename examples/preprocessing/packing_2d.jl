@@ -32,7 +32,7 @@ signed_distance_field = SignedDistanceField(geometry, particle_spacing;
 point_in_geometry_algorithm = WindingNumberJacobson(; geometry,
                                                     hierarchical_winding=true)
 # Returns `InitialCondition`
-shape_sampled = ComplexShape(geometry; particle_spacing, density,
+shape_sampled = ComplexShape(geometry; particle_spacing, density, grid_offset=0.0,
                              point_in_geometry_algorithm)
 
 shape_sampled.mass .= density * TrixiParticles.volume(geometry) /
