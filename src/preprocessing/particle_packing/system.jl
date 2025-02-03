@@ -46,24 +46,26 @@ For more information on the methods, see description below.
 """
 struct ParticlePackingSystem{S, F, NDIMS, ELTYPE <: Real,
                              IC, K, N} <: FluidSystem{NDIMS, IC}
-    initial_condition     :: IC
-    smoothing_kernel      :: K
-    smoothing_length      :: ELTYPE
-    background_pressure   :: ELTYPE
-    tlsph                 :: Bool
-    signed_distance_field :: S
-    is_boundary           :: Bool
-    shift_length          :: ELTYPE
-    neighborhood_search   :: N
-    signed_distances      :: Vector{ELTYPE} # Only for visualization
-    buffer                :: Nothing
-    update_callback_used  :: Ref{Bool}
+    initial_condition              :: IC
+    smoothing_kernel               :: K
+    smoothing_length               :: ELTYPE
+    smoothing_length_interpolation :: ELTYPE
+    background_pressure            :: ELTYPE
+    tlsph                          :: Bool
+    signed_distance_field          :: S
+    is_boundary                    :: Bool
+    shift_length                   :: ELTYPE
+    neighborhood_search            :: N
+    signed_distances               :: Vector{ELTYPE} # Only for visualization
+    buffer                         :: Nothing
+    update_callback_used           :: Ref{Bool}
 
     function ParticlePackingSystem(shape::InitialCondition;
                                    signed_distance_field::Union{SignedDistanceField,
                                                                 Nothing},
-                                   smoothing_kernel=SchoenbergCubicSplineKernel{ndims(shape)}(),
-                                   smoothing_length=1.2 * shape.particle_spacing,
+                                   smoothing_kernel=SchoenbergQuinticSplineKernel{ndims(shape)}(),
+                                   smoothing_length=0.8 * shape.particle_spacing,
+                                   smoothing_length_interpolation=1.3 * shape.particle_spacing,
                                    is_boundary=false, boundary_compress_factor=1.0,
                                    neighborhood_search=GridNeighborhoodSearch{ndims(shape)}(),
                                    background_pressure, tlsph=true, fixed_system=false)
@@ -83,7 +85,7 @@ struct ParticlePackingSystem{S, F, NDIMS, ELTYPE <: Real,
                    neighborhood_search
             nhs = copy_neighborhood_search(nhs_,
                                            compact_support(smoothing_kernel,
-                                                           smoothing_length),
+                                                           smoothing_length_interpolation),
                                            length(signed_distance_field.positions))
 
             # Initialize neighborhood search with signed distances
@@ -108,8 +110,8 @@ struct ParticlePackingSystem{S, F, NDIMS, ELTYPE <: Real,
         return new{typeof(signed_distance_field), fixed_system, NDIMS, ELTYPE,
                    typeof(shape), typeof(smoothing_kernel),
                    typeof(nhs)}(shape, smoothing_kernel, smoothing_length,
-                                background_pressure, tlsph, signed_distance_field,
-                                is_boundary, shift_length, nhs,
+                                smoothing_length_interpolation, background_pressure, tlsph,
+                                signed_distance_field, is_boundary, shift_length, nhs,
                                 fill(zero(ELTYPE), nparticles(shape)), nothing, false)
     end
 end
@@ -239,7 +241,7 @@ end
 constrain_particles_onto_surface!(u, system::ParticlePackingSystem{Nothing}) = u
 
 function constrain_particles_onto_surface!(u, system::ParticlePackingSystem)
-    (; neighborhood_search, signed_distance_field) = system
+    (; neighborhood_search, signed_distance_field, smoothing_length_interpolation) = system
     (; positions, distances, normals) = signed_distance_field
 
     search_radius2 = compact_support(system, system)^2
@@ -258,7 +260,8 @@ function constrain_particles_onto_surface!(u, system::ParticlePackingSystem)
             distance2 > search_radius2 && continue
 
             distance = sqrt(distance2)
-            kernel_weight = smoothing_kernel(system, distance)
+            kernel_weight = kernel(system.smoothing_kernel, distance,
+                                   smoothing_length_interpolation)
 
             distance_signed += distances[neighbor] * kernel_weight
 

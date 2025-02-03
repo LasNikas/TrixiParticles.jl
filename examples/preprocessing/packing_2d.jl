@@ -62,10 +62,11 @@ packing_system = ParticlePackingSystem(shape_sampled;
                                        smoothing_length=smoothing_length,
                                        signed_distance_field, tlsph=tlsph,
                                        background_pressure)
-
+smoothing_length_interpolation = 1.3 * particle_spacing
 boundary_system = ParticlePackingSystem(boundary_sampled;
                                         smoothing_kernel=smoothing_kernel,
                                         smoothing_length=smoothing_length,
+                                        smoothing_length_interpolation=smoothing_length_interpolation,
                                         is_boundary=true, signed_distance_field,
                                         tlsph=tlsph, boundary_compress_factor=0.8,
                                         background_pressure)
@@ -76,7 +77,7 @@ semi = pack_boundary ? Semidiscretization(packing_system, boundary_system) :
        Semidiscretization(packing_system)
 
 # Use a high `tspan` to guarantee that the simulation runs at least for `maxiters`
-tspan = (0, 10.0)
+tspan = (0, 10000.0)
 ode = semidiscretize(semi, tspan)
 
 # Use this callback to stop the simulation when it is sufficiently close to a steady state
@@ -93,9 +94,11 @@ pp_callback = nothing
 
 callbacks = CallbackSet(UpdateCallback(), saving_callback, info_callback, steady_state,
                         pp_callback)
-
+maxiters = 1000
 sol = solve(ode, RDPK3SpFSAL35();
-            save_everystep=false, maxiters=1000, callback=callbacks, dtmax=1e-2)
+            abstol=1e-6, # Default abstol is 1e-6 (may need to be tuned to prevent boundary penetration)
+            reltol=1e-4, # Default reltol is 1e-3 (may need to be tuned to prevent boundary penetration)
+            save_everystep=false, maxiters=maxiters, callback=callbacks)
 
 packed_ic = InitialCondition(sol, packing_system, semi)
 packed_boundary_ic = pack_boundary ? InitialCondition(sol, boundary_system, semi) : nothing
