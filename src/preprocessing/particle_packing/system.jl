@@ -64,8 +64,8 @@ struct ParticlePackingSystem{S, F, NDIMS, ELTYPE <: Real,
                                    signed_distance_field::Union{SignedDistanceField,
                                                                 Nothing},
                                    smoothing_kernel=SchoenbergQuinticSplineKernel{ndims(shape)}(),
-                                   smoothing_length=0.8 * shape.particle_spacing,
-                                   smoothing_length_interpolation=1.3 * shape.particle_spacing,
+                                   smoothing_length=1.0 * shape.particle_spacing,
+                                   smoothing_length_interpolation=smoothing_length,
                                    is_boundary=false, boundary_compress_factor=1.0,
                                    neighborhood_search=GridNeighborhoodSearch{ndims(shape)}(),
                                    background_pressure, tlsph=true, fixed_system=false)
@@ -166,6 +166,8 @@ end
 update_callback_used!(system::ParticlePackingSystem) = system.update_callback_used[] = true
 
 function write2vtk!(vtk, v, u, t, system::ParticlePackingSystem; write_meta_data=true)
+    vtk["velocity"] = [advection_velocity(v, system, particle)
+                       for particle in active_particles(system)]
     if write_meta_data
         vtk["signed_distances"] = system.signed_distances
     end

@@ -22,7 +22,7 @@ using Printf: @printf, @sprintf
 using ReadVTK: ReadVTK
 using RecipesBase: RecipesBase, @series
 using Random: seed!
-using SciMLBase: CallbackSet, DiscreteCallback, DynamicalODEProblem, u_modified!,
+using SciMLBase: CallbackSet, DiscreteCallback, DynamicalODEProblem, u_modified!, get_du, get_du!,
                  get_tmp_cache, set_proposed_dt!, ODESolution, ODEProblem, terminate!
 @reexport using StaticArrays: SVector
 using StaticArrays: @SMatrix, SMatrix, setindex

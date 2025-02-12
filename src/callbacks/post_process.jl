@@ -250,6 +250,10 @@ function (pp::PostprocessCallback)(integrator)
 
         v = wrap_v(v_ode, system, semi)
         u = wrap_u(u_ode, system, semi)
+        duv_ode = get_du(integrator)
+        dv_ode, du_ode = duv_ode.x
+        dv = wrap_v(dv_ode, system, semi)
+
         for (key, f) in pp.func
             result = f(v, u, t, system)
             if result !== nothing
@@ -267,6 +271,23 @@ function (pp::PostprocessCallback)(integrator)
 
             l_inf = maximum(abs.(density - system.initial_condition.density))
             add_entry!(pp, "l_inf", t, l_inf, filenames[system_index])
+
+            l_2 = sqrt(sum((density - system.initial_condition.density) .^ 2) /
+                       nparticles(system))
+
+            add_entry!(pp, "l_2", t, l_2, filenames[system_index])
+
+            dv_abs = [norm(current_velocity(dv, system, particle))
+                      for particle in each_moving_particle(system)]
+
+            dv_max = maximum(dv_abs)
+
+            dv_l2 = sqrt(sum((dv_max - zero(dv_max)) .^ 2) / nparticles(system))
+
+            add_entry!(pp, "dv_max", t, dv_max, filenames[system_index])
+            add_entry!(pp, "dv_l2", t, dv_l2, filenames[system_index])
+
+            add_entry!(pp, "dt", t, integrator.dt, filenames[system_index])
 
             new_data = true
         end
