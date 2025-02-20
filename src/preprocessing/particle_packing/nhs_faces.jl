@@ -25,6 +25,7 @@ function faces_in_cell(cell, neighborhood_search)
 end
 
 @inline eachneighbor(coords, nhs::TrivialNeighborhoodSearch) = nhs.eachpoint
+
 @inline function eachneighbor(coords, neighborhood_search::FaceNeighborhoodSearch)
     cell = PointNeighbors.cell_coords(coords, neighborhood_search)
     return neighborhood_search.neighbors[cell]

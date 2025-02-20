@@ -6,6 +6,21 @@ used in the Julia ecosystem. Notable changes will be documented in this file for
 ## Version 0.2.5
 
 ### Features
+
+## Version 0.2.6
+
+### Features
+
+- Support for surface tension was added to EDAC (#539)
+
+### Refactored
+
+- Surface normal calculation was moved from surface_tension.jl to surface_normal_sph.jl (#539)
+
+## Version 0.2.5
+
+### Features
+
 - Add particle packing for 2D (.asc) and 3D (.stl) geometries (#529)
 
 ### Compatibility Changes
