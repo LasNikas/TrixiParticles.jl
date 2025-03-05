@@ -66,27 +66,27 @@ saving_callback = SolutionSavingCallback(dt=0.1, my_custom_quantity=kinetic_ener
 ```
 """
 mutable struct SolutionSavingCallback{I, CQ}
-    interval                :: I
-    save_times              :: Array{Float64, 1}
-    save_initial_solution   :: Bool
-    save_final_solution     :: Bool
-    write_meta_data         :: Bool
+    interval              :: I
+    save_times            :: Vector{Float64}
+    save_initial_solution :: Bool
+    save_final_solution   :: Bool
+    write_meta_data       :: Bool
     write_summation_density :: Bool
-    verbose                 :: Bool
-    output_directory        :: String
-    prefix                  :: String
-    max_coordinates         :: Float64
-    custom_quantities       :: CQ
-    latest_saved_iter       :: Int
-    git_hash                :: Ref{String}
+    verbose               :: Bool
+    output_directory      :: String
+    prefix                :: String
+    max_coordinates       :: Float64
+    custom_quantities     :: CQ
+    latest_saved_iter     :: Int
+    git_hash              :: Ref{String}
 end
 
 function SolutionSavingCallback(; interval::Integer=0, dt=0.0,
-                                save_times=Array{Float64, 1}([]),
-                                write_summation_density=false,
+                                save_times=Float64[],
                                 save_initial_solution=true, save_final_solution=true,
                                 output_directory="out", append_timestamp=false,
                                 prefix="", verbose=false, write_meta_data=true,
+                                write_summation_density=false,
                                 max_coordinates=Float64(2^15), custom_quantities...)
     if (dt > 0 && interval > 0) || (length(save_times) > 0 && (dt > 0 || interval > 0))
         throw(ArgumentError("Setting multiple save times for the same solution " *
@@ -101,7 +101,7 @@ function SolutionSavingCallback(; interval::Integer=0, dt=0.0,
         output_directory *= string("_", Dates.format(now(), "YY-mm-ddTHHMMSS"))
     end
 
-    solution_callback = SolutionSavingCallback(interval, save_times,
+    solution_callback = SolutionSavingCallback(interval, Float64.(save_times),
                                                save_initial_solution, save_final_solution,
                                                write_meta_data, write_summation_density,
                                                verbose, output_directory, prefix,
