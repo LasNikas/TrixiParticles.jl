@@ -178,7 +178,7 @@ RecipesBase.@recipe function f(::Union{InitialCondition, SignedDistanceField,
                 pixels_per_particle = obj.particle_spacing / pixel_size
 
                 # Marker radius in pixels
-                markersize --> 0.5 * pixels_per_particle - markerstrokewidth / 2
+                markersize --> 0.5 * pixels_per_particle #- markerstrokewidth / 2
             end
 
             label --> obj.label
