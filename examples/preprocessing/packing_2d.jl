@@ -34,6 +34,7 @@ point_in_geometry_algorithm = WindingNumberJacobson(; geometry,
                                                     hierarchical_winding=true)
 # Returns `InitialCondition`
 shape_sampled = ComplexShape(geometry; particle_spacing, density, grid_offset=0.0,
+                             max_nparticles=10^10,
                              point_in_geometry_algorithm)
 
 shape_sampled.mass .= density * TrixiParticles.volume(geometry) /
