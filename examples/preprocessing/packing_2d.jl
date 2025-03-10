@@ -44,7 +44,6 @@ if pack_boundary
     # Returns `InitialCondition`
     boundary_sampled = sample_boundary(signed_distance_field; boundary_density=density,
                                        boundary_thickness, tlsph)
-    boundary_sampled.mass .= first(shape_sampled.mass)
 end
 
 # ==========================================================================================
