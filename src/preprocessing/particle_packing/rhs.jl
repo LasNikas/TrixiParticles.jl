@@ -14,15 +14,15 @@ function interact!(dv, v_particle_system, u_particle_system,
         rho_a = system.initial_condition.density[particle]
         rho_b = neighbor_system.initial_condition.density[neighbor]
 
-        m_a = system.initial_condition.mass[particle]
-        m_b = neighbor_system.initial_condition.mass[neighbor]
+        m_a = system.mass[particle]
+        m_b = neighbor_system.mass[neighbor]
 
         V_a = m_a / rho_a
         V_b = m_b / rho_b
 
         p_b = system.background_pressure
 
-        grad_kernel = smoothing_kernel_grad(system, pos_diff, distance)
+        grad_kernel = smoothing_kernel_grad(system, pos_diff, distance, particle)
 
         # This vanishes for uniform particle distributions
         dv_repulsive_pressure = -(2 / m_a) * V_a * V_b * p_b * grad_kernel

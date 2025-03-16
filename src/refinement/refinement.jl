@@ -69,6 +69,23 @@ function refinement!(semi, v_ode, u_ode, v_tmp, u_tmp, t)
 
     # Resize neighborhood search
     # TODO
+    # nhs = first(first(semi.neighborhood_searches))
+    # for i in eachindex(semi.systems)
+    #     semi.neighborhood_searches[i] = Tuple(create_neighborhood_search(nhs,
+    #                                                                      semi.systems[i],
+    #                                                                      neighbor)
+    #                                           for neighbor in semi.systems)
+    # end
+
+    # foreach_system(semi) do system
+    #     u = wrap_u(u_ode, system, semi)
+    #     foreach_system(semi) do neighbor
+    #         u_neighbor = wrap_u(u_ode, neighbor, semi)
+    #         PointNeighbors.initialize!(get_neighborhood_search(system, neighbor, semi),
+    #                                    current_coordinates(u, system),
+    #                                    current_coordinates(u_neighbor, neighbor))
+    #     end
+    # end
 
     return semi
 end
@@ -171,20 +188,24 @@ end
     counter_neighbors = 0
 
     foreach_system(semi) do neighbor_system
-        neighborhood_search = get_neighborhood_search(system, neighbor_system, semi)
+        if neighbor_system.is_boundary
+            neighborhood_search = get_neighborhood_search(system, neighbor_system, semi)
 
-        u_neighbor_system = wrap_u(u_ode, neighbor_system, semi)
-        neighbor_coords = current_coordinates(u_neighbor_system, neighbor_system)
+            u_neighbor_system = wrap_u(u_ode, neighbor_system, semi)
+            neighbor_coords = current_coordinates(u_neighbor_system, neighbor_system)
 
-        PointNeighbors.foreach_neighbor(system_coords, neighbor_coords, neighborhood_search,
-                                        particle) do particle, neighbor, pos_diff, distance
-            dp_neighbor = particle_spacing(neighbor_system, neighbor)
+            PointNeighbors.foreach_neighbor(system_coords, neighbor_coords,
+                                            neighborhood_search,
+                                            particle) do particle, neighbor, pos_diff,
+                                                         distance
+                dp_neighbor = particle_spacing(neighbor_system, neighbor)
 
-            dp_min = min(dp_min, dp_neighbor)
-            dp_max = max(dp_max, dp_neighbor)
-            dp_avg += dp_neighbor
+                dp_min = min(dp_min, dp_neighbor)
+                dp_max = max(dp_max, dp_neighbor)
+                dp_avg += dp_neighbor
 
-            counter_neighbors += 1
+                counter_neighbors += 1
+            end
         end
     end
 

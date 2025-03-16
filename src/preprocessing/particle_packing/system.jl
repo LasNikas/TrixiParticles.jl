@@ -47,9 +47,10 @@ For more information on the methods, see description below.
 - `smoothing_length_interpolation`: Smoothing length to be used for intrepolating the `SignedDistanceField` information.
                                     The default is `smoothing_length_interpolation = smoothing_length`.
 """
-struct ParticlePackingSystem{S, F, NDIMS, ELTYPE <: Real,
-                             IC, K, N} <: FluidSystem{NDIMS, IC}
+struct ParticlePackingSystem{S, F, NDIMS, ELTYPE <: Real, M,
+                             IC, K, N, PR, C} <: FluidSystem{NDIMS, IC}
     initial_condition              :: IC
+    mass                           :: M
     smoothing_kernel               :: K
     smoothing_length               :: ELTYPE
     smoothing_length_interpolation :: ELTYPE
@@ -59,9 +60,12 @@ struct ParticlePackingSystem{S, F, NDIMS, ELTYPE <: Real,
     is_boundary                    :: Bool
     shift_length                   :: ELTYPE
     neighborhood_search            :: N
-    signed_distances               :: Vector{ELTYPE} # Only for visualization
     buffer                         :: Nothing
+    correction                     :: Nothing
+    transport_velocity             :: TransportVelocityAdami
+    particle_refinement            :: PR
     update_callback_used           :: Ref{Bool}
+    cache                          :: C
 
     function ParticlePackingSystem(shape::InitialCondition;
                                    signed_distance_field::Union{SignedDistanceField,
@@ -70,6 +74,7 @@ struct ParticlePackingSystem{S, F, NDIMS, ELTYPE <: Real,
                                    smoothing_length=shape.particle_spacing,
                                    smoothing_length_interpolation=smoothing_length,
                                    is_boundary=false, boundary_compress_factor=1,
+                                   particle_refinement=nothing,
                                    neighborhood_search=GridNeighborhoodSearch{ndims(shape)}(),
                                    background_pressure, tlsph=true, fixed_system=false)
         NDIMS = ndims(shape)
@@ -112,12 +117,20 @@ struct ParticlePackingSystem{S, F, NDIMS, ELTYPE <: Real,
             tlsph ? zero(ELTYPE) : shape.particle_spacing / 2
         end
 
+        cache = create_cache_refinement(shape, particle_refinement,
+                                        smoothing_length_interpolation)
+
+        tvf = TransportVelocityAdami(background_pressure)
+
+        mass = copy(shape.mass)
         return new{typeof(signed_distance_field), fixed_system, NDIMS, ELTYPE,
-                   typeof(shape), typeof(smoothing_kernel),
-                   typeof(nhs)}(shape, smoothing_kernel, smoothing_length,
-                                smoothing_length_interpolation, background_pressure, tlsph,
-                                signed_distance_field, is_boundary, shift_length, nhs,
-                                fill(zero(ELTYPE), nparticles(shape)), nothing, false)
+                   typeof(mass), typeof(shape), typeof(smoothing_kernel), typeof(nhs),
+                   typeof(particle_refinement),
+                   typeof(cache)}(shape, mass, smoothing_kernel, smoothing_length,
+                                  smoothing_length_interpolation, background_pressure,
+                                  tlsph, signed_distance_field, is_boundary, shift_length,
+                                  nhs, nothing, nothing, tvf, particle_refinement, false,
+                                  cache)
     end
 end
 
@@ -177,9 +190,13 @@ update_callback_used!(system::ParticlePackingSystem) = system.update_callback_us
 function write2vtk!(vtk, v, u, t, system::ParticlePackingSystem; write_meta_data=true)
     vtk["velocity"] = [advection_velocity(v, system, particle)
                        for particle in active_particles(system)]
-    if write_meta_data
-        vtk["signed_distances"] = system.signed_distances
-    end
+    vtk["density"] = [particle_density(v, system, particle)
+                      for particle in active_particles(system)]
+
+    vtk["mass"] = system.mass
+
+    vtk["smoothing_length"] = [smoothing_length(system, particle)
+                               for particle in active_particles(system)]
 end
 
 # Skip for fixed systems
@@ -214,11 +231,12 @@ end
 @inline source_terms(system::ParticlePackingSystem) = nothing
 @inline add_acceleration!(dv, particle, system::ParticlePackingSystem) = dv
 
-# Number of particles in the system
-@inline nparticles(system::ParticlePackingSystem) = length(system.initial_condition.mass)
+@inline function particle_density(v, system::ParticlePackingSystem, particle)
+    return system.initial_condition.density[particle]
+end
 
-@inline function hydrodynamic_mass(system::ParticlePackingSystem, particle)
-    return system.initial_condition.mass[particle]
+@inline function particle_pressure(v, system::ParticlePackingSystem, particle)
+    return zero(eltype(system))
 end
 
 # Update from `UpdateCallback` (between time steps)
@@ -284,9 +302,6 @@ function constrain_particles_onto_surface!(u, system::ParticlePackingSystem)
         if volume > eps()
             distance_signed /= volume
             normal_vector /= volume
-
-            # Store signed distance for visualization
-            system.signed_distances[particle] = distance_signed
 
             constrain_particle!(u, system, particle, distance_signed, normal_vector)
         end
@@ -357,4 +372,58 @@ end
     end
 
     return du
+end
+
+@inline function set_particle_spacing!(particle_system::ParticlePackingSystem,
+                                       neighbor_system::ParticlePackingSystem,
+                                       system_coords, v_ode, u_ode, semi)
+    if neighbor_system.is_boundary && !(particle_system.is_boundary)
+        (; smoothing_length, smoothing_length_factor) = particle_system.cache
+
+        neighborhood_search = get_neighborhood_search(particle_system, neighbor_system,
+                                                      semi)
+        u_neighbor_system = wrap_u(u_ode, neighbor_system, semi)
+        neighbor_coords = current_coordinates(u_neighbor_system, neighbor_system)
+
+        # Loop over all pairs of particles and neighbors within the kernel cutoff.
+        foreach_point_neighbor(particle_system, neighbor_system,
+                               system_coords, neighbor_coords,
+                               neighborhood_search) do particle, neighbor, pos_diff,
+                                                       distance
+            # Only consider particles with a distance > 0.
+            distance < sqrt(eps()) && return
+
+            dp_particle = particle_spacing(particle_system, particle)
+            dp_neighbor = particle_spacing(neighbor_system, neighbor)
+
+            smoothing_length[particle] = smoothing_length_factor *
+                                         min(dp_neighbor, dp_particle)
+        end
+    end
+    return particle_system
+end
+
+function Base.resize!(system::ParticlePackingSystem, refinement, capacity_system::Int)
+    resize!(system.mass, capacity_system)
+    resize!(system.initial_condition.density, capacity_system)
+
+    resize_cache!(system, capacity_system)
+
+    resize_refinement!(system)
+
+    return system
+end
+
+function resize_cache!(system::ParticlePackingSystem, n::Int)
+    resize!(system.cache.smoothing_length, n)
+
+    return system
+end
+
+@inline function set_particle_density!(v, system::ParticlePackingSystem, particle, density)
+    system.initial_condition.density[particle] = density
+end
+
+@inline function set_particlepressure!(v, system::ParticlePackingSystem, particle, density)
+    return system
 end

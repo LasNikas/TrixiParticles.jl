@@ -77,10 +77,11 @@ function Semidiscretization(systems...;
 
     # Create a tuple of n neighborhood searches for each of the n systems.
     # We will need one neighborhood search for each pair of systems.
-    searches = Tuple(Tuple(create_neighborhood_search(neighborhood_search,
+    # TODO resize NHS
+    searches = [Tuple(create_neighborhood_search(neighborhood_search,
                                                       system, neighbor)
                            for neighbor in systems)
-                     for system in systems)
+                     for system in systems]
 
     return Semidiscretization(systems, ranges_u, ranges_v, searches)
 end

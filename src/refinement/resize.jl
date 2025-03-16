@@ -40,6 +40,18 @@ function Base.resize!(v_ode, u_ode, _v_ode, _u_ode, semi::Semidiscretization)
         semi.ranges_u[i] = ranges_u_new[i]
     end
 
+    sizes_u = sum(u_nvariables(system) * n_moving_particles(system) for system in systems)
+    sizes_v = sum(v_nvariables(system) * n_moving_particles(system) for system in systems)
+
+    # Resize before copy
+    if length(v_ode) < sizes_v
+        resize!(v_ode, sizes_v)
+        resize!(_v_ode, sizes_v)
+
+        resize!(u_ode, sizes_u)
+        resize!(_u_ode, sizes_u)
+    end
+
     for i in eachindex(ranges_u_old)
         length_u = min(length(ranges_u_old[i]), length(ranges_u_new[i]))
         for j in 0:(length_u - 1)
@@ -52,14 +64,14 @@ function Base.resize!(v_ode, u_ode, _v_ode, _u_ode, semi::Semidiscretization)
         end
     end
 
-    sizes_u = sum(u_nvariables(system) * n_moving_particles(system) for system in systems)
-    sizes_v = sum(v_nvariables(system) * n_moving_particles(system) for system in systems)
+    # Resize after copy
+    if length(v_ode) > sizes_v
+        resize!(v_ode, sizes_v)
+        resize!(u_ode, sizes_u)
 
-    resize!(v_ode, sizes_v)
-    resize!(u_ode, sizes_u)
-
-    resize!(_v_ode, sizes_v)
-    resize!(_u_ode, sizes_u)
+        resize!(_v_ode, sizes_v)
+        resize!(_u_ode, sizes_u)
+    end
 
     # TODO: Do the following in the callback
     # resize!(integrator, (length(v_ode), length(u_ode)))

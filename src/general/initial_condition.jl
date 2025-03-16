@@ -326,35 +326,13 @@ end
 
 Base.intersect(initial_condition::InitialCondition) = initial_condition
 
-function InitialCondition(sol::ODESolution, system, semi; use_final_velocity=false,
-                          min_particle_distance=system.initial_condition.particle_spacing /
-                                                4)
-    ic = system.initial_condition
-
+function InitialCondition(sol::ODESolution, system, semi)
     v_ode, u_ode = sol.u[end].x
 
     u = wrap_u(u_ode, system, semi)
-    v = wrap_u(v_ode, system, semi)
 
-    # Check if particles come too close especially when the surface exhibits large curvature
-    too_close = find_too_close_particles(u, min_particle_distance)
-
-    velocity_ = use_final_velocity ? view(v, 1:ndims(system), :) : ic.velocity
-
-    not_too_close = setdiff(eachparticle(system), too_close)
-
-    coordinates = u[:, not_too_close]
-    velocity = velocity_[:, not_too_close]
-    mass = ic.mass[not_too_close]
-    density = ic.density[not_too_close]
-    pressure = ic.pressure[not_too_close]
-
-    if length(too_close) > 0
-        @info "Removed $(length(too_close)) particles that are too close together"
-    end
-
-    return InitialCondition{ndims(ic)}(coordinates, velocity, mass, density, pressure,
-                                       ic.particle_spacing)
+    return InitialCondition(; coordinates=copy(u), density=system.initial_condition.density,
+                            mass=system.mass)
 end
 
 # Find particles in `coords1` that are closer than `max_distance` to any particle in `coords2`
