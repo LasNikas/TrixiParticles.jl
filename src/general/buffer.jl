@@ -1,8 +1,7 @@
-struct SystemBuffer{AP, APC, EP}
-    active_particle       :: AP # Vector{Bool}
-    active_particle_count :: APC
-    eachparticle          :: EP # Vector{Int}
-    buffer_size           :: Int
+struct SystemBuffer{AP, EAP}
+    active_particle      :: AP # Vector{Bool}
+    buffer_size          :: Int
+    each_active_particle :: EAP # Exclusively for writing data related to active particles
 end
 
 function SystemBuffer(active_size, buffer_size::Integer)
@@ -12,9 +11,10 @@ function SystemBuffer(active_size, buffer_size::Integer)
     # does not support atomic operations on `Bool`.
     # https://github.com/JuliaGPU/CUDA.jl/blob/2cc9285676a4cd28d0846ca62f0300c56d281d38/src/device/intrinsics/atomics.jl#L243
     active_particle = vcat(fill(UInt32(1), active_size), fill(UInt32(0), buffer_size))
-    eachparticle = collect(eachindex(active_particle))
 
-    return SystemBuffer(active_particle, Ref(active_size), eachparticle, buffer_size)
+    each_active_particle = Int[]
+
+    return SystemBuffer(active_particle, buffer_size, each_active_particle)
 end
 
 allocate_buffer(initial_condition, ::Nothing) = initial_condition
@@ -40,37 +40,33 @@ function allocate_buffer(initial_condition, buffer::SystemBuffer)
     return union(initial_condition, buffer_ic)
 end
 
-@inline update_system_buffer!(buffer::Nothing, semi) = buffer
+@inline active_particles(system, buffer::Nothing) = nothing
 
-# TODO `resize` allocates. Find a non-allocating version
-@inline function update_system_buffer!(buffer::SystemBuffer, semi)
-    (; active_particle) = buffer
+@inline active_particles(system, buffer) = buffer.active_particle
 
-    buffer.active_particle_count[] = sum(active_particle)
-    buffer.eachparticle .= -1
+# Warning: This function must only be called after `update_system_buffer!`.
+@inline each_active_particle(system) = each_active_particle(system, system.buffer)
 
-    @threaded semi for i in 1:buffer.active_particle_count[]
-        active = 0
-        for j in eachindex(active_particle)
-            if active_particle[j] == true
-                active += 1
-                if active == i
-                    buffer.eachparticle[i] = j
-                    break
-                end
-            end
-        end
-    end
+# Warning: This function must only be called after `update_system_buffer!`.
+@inline each_active_particle(system, buffer::Nothing) = each_moving_particle(system)
 
-    return buffer
+# Warning: This function must only be called after `update_system_buffer!`.
+@inline each_active_particle(system, buffer) = buffer.each_active_particle
+
+@inline function active_coordinates(u, system, buffer)
+    return view(u, :, each_active_particle(system, buffer))
 end
 
-@inline each_moving_particle(system, buffer) = active_particles(system, buffer)
+@inline update_system_buffer!(system, buffer::Nothing) = system
 
-@inline active_coordinates(u, system, buffer) = view(u, :, active_particles(system, buffer))
+function update_system_buffer!(system, buffer)
+    (; active_particle, each_active_particle) = buffer
 
-@inline function active_particles(system, buffer)
-    return view(buffer.eachparticle, 1:buffer.active_particle_count[])
+    resize!(each_active_particle, sum(active_particle))
+
+    each_active_particle .= findall(x -> x == true, active_particle)
+
+    return system
 end
 
 @inline function activate_next_particle(system)

@@ -4,8 +4,9 @@
 function PointNeighbors.foreach_point_neighbor(f, system, neighbor_system,
                                                system_coords, neighbor_coords, semi;
                                                points=eachparticle(system),
+                                               points_active=active_particles(system),
                                                parallelization_backend=semi.parallelization_backend)
     neighborhood_search = get_neighborhood_search(system, neighbor_system, semi)
     foreach_point_neighbor(f, system_coords, neighbor_coords, neighborhood_search;
-                           points, parallelization_backend)
+                           points_active, points, parallelization_backend)
 end

@@ -86,6 +86,9 @@ function trixi2vtk(system_, v_ode_, u_ode_, semi_, t, periodic_box; output_direc
     # Transfer to CPU if data is on the GPU. Do nothing if already on CPU.
     v_ode, u_ode, system, semi = transfer2cpu(v_ode_, u_ode_, system_, semi_)
 
+    # This is exclusively for writing the data. An iterator is created only over active particles.
+    update_system_buffer!(system, system.buffer)
+
     v = wrap_v(v_ode, system, semi)
     u = wrap_u(u_ode, system, semi)
 
@@ -121,12 +124,12 @@ function trixi2vtk(system_, v_ode_, u_ode_, semi_, t, periodic_box; output_direc
         write2vtk!(vtk, v, u, t, system, write_meta_data=write_meta_data)
 
         # Store particle index
-        vtk["index"] = active_particles(system)
+        vtk["index"] = each_active_particle(system)
         vtk["time"] = t
         vtk["ndims"] = ndims(system)
 
         vtk["particle_spacing"] = [particle_spacing(system, particle)
-                                   for particle in active_particles(system)]
+                                   for particle in each_active_particle(system)]
 
         if write_meta_data
             vtk["solver_version"] = git_hash
@@ -268,15 +271,16 @@ end
 
 function write2vtk!(vtk, v, u, t, system::FluidSystem; write_meta_data=true)
     vtk["velocity"] = [current_velocity(v, system, particle)
-                       for particle in active_particles(system)]
-    vtk["density"] = current_density(v, system)
+                       for particle in each_active_particle(system)]
+    vtk["density"] = [current_density(v, system, particle)
+                      for particle in each_active_particle(system)]
     # Indexing the pressure is a workaround for slicing issue (see https://github.com/JuliaSIMD/StrideArrays.jl/issues/88)
     vtk["pressure"] = [current_pressure(v, system, particle)
-                       for particle in active_particles(system)]
+                       for particle in each_active_particle(system)]
 
     if system.surface_normal_method !== nothing
         vtk["surf_normal"] = [surface_normal(system, particle)
-                              for particle in eachparticle(system)]
+                              for particle in each_active_particle(system)]
         vtk["neighbor_count"] = system.cache.neighbor_count
         vtk["color"] = system.cache.color
     end
@@ -400,9 +404,11 @@ end
 
 function write2vtk!(vtk, v, u, t, system::OpenBoundarySPHSystem; write_meta_data=true)
     vtk["velocity"] = [current_velocity(v, system, particle)
-                       for particle in active_particles(system)]
-    vtk["density"] = current_density(v, system)
-    vtk["pressure"] = current_pressure(v, system)
+                       for particle in each_active_particle(system)]
+    vtk["density"] = [current_density(v, system, particle)
+                      for particle in each_active_particle(system)]
+    vtk["pressure"] = [current_pressure(v, system, particle)
+                       for particle in each_active_particle(system)]
 
     if write_meta_data
         vtk["boundary_zone"] = type2string(first(typeof(system.boundary_zone).parameters))

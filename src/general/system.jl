@@ -40,14 +40,12 @@ initialize!(system, semi) = system
 @inline eachparticle(system) = Base.OneTo(nparticles(system))
 
 # Wrapper for systems with `SystemBuffer`
-@inline each_moving_particle(system) = each_moving_particle(system, system.buffer)
-@inline each_moving_particle(system, ::Nothing) = Base.OneTo(n_moving_particles(system))
+@inline each_moving_particle(system) = Base.OneTo(n_moving_particles(system))
 
 @inline active_coordinates(u, system) = active_coordinates(u, system, system.buffer)
 @inline active_coordinates(u, system, ::Nothing) = current_coordinates(u, system)
 
 @inline active_particles(system) = active_particles(system, system.buffer)
-@inline active_particles(system, ::Nothing) = eachparticle(system)
 
 # This should not be dispatched by system type. We always expect to get a column of `A`.
 @propagate_inbounds function extract_svector(A, system, i)

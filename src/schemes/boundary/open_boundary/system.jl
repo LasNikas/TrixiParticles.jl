@@ -292,9 +292,6 @@ function check_domain!(system, v, u, v_ode, u_ode, semi)
         end
     end
 
-    update_system_buffer!(system.buffer, semi)
-    update_system_buffer!(fluid_system.buffer, semi)
-
     # Check the fluid particles whether they're entering the boundary zone
     @threaded semi for fluid_particle in each_moving_particle(fluid_system)
         fluid_coords = current_coords(u_fluid, fluid_system, fluid_particle)
@@ -305,9 +302,6 @@ function check_domain!(system, v, u, v_ode, u_ode, semi)
                               v, u, v_fluid, u_fluid)
         end
     end
-
-    update_system_buffer!(system.buffer, semi)
-    update_system_buffer!(fluid_system.buffer, semi)
 
     return system
 end

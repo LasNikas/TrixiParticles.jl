@@ -39,6 +39,9 @@ RecipesBase.@recipe function f(v_ode, u_ode, semi::Semidiscretization, particle_
                                xlims=(-Inf, Inf), ylims=(-Inf, Inf))
     systems_data = map(enumerate(semi.systems)) do (i, system)
         u = wrap_u(u_ode, system, semi)
+
+        update_system_buffer!(system, system.buffer)
+
         periodic_box = get_neighborhood_search(system, semi).periodic_box
         coordinates = PointNeighbors.periodic_coords(active_coordinates(u, system),
                                                      periodic_box)
