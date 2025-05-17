@@ -11,7 +11,7 @@ for resolution_factor in resolution_factors
     # ======================================================================================
     # ==== Run the simulation
     trixi_include(joinpath(validation_dir(), "vortex_street_2d", "vortex_street_2d.jl"),
-                  factor_d=resolution_factor, saving_callback=nothing, tspan=(0.0, 0.2))
+                  factor_d=resolution_factor, saving_callback=nothing, tspan=(0.0, 50.0))
 
     # ======================================================================================
     # ==== Read results and compute the Strouhal number
