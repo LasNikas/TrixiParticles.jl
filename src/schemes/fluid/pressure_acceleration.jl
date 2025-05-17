@@ -57,7 +57,11 @@ end
 
     return -volume_term * pressure_tilde * W_a
 end
-
+@inline function tensile_instability_control(m_a, m_b, rho_a, rho_b, p_a, p_b, W_a)
+    # Same as `pressure_acceleration_continuity_density`, but using the minus formulation
+    # when pressures are negative to avoid tensile instability.
+    return -m_b * (abs(p_a) + p_b) / (rho_a * rho_b) * W_a
+end
 function choose_pressure_acceleration_formulation(pressure_acceleration,
                                                   density_calculator, NDIMS, ELTYPE,
                                                   correction)
