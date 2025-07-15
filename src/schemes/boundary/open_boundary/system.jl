@@ -36,7 +36,7 @@ Open boundary system for in- and outflow particles.
     This is an experimental feature and may change in future releases.
     It is GPU-compatible (e.g., with CUDA.jl and AMDGPU.jl), but currently **not** supported with Metal.jl.
 """
-struct OpenBoundarySPHSystem{BM, ELTYPE, NDIMS, IC, FS, FSI, ARRAY1D, BC, FC, BZ, RV,
+struct OpenBoundarySPHSystem{BM, ELTYPE, NDIMS, IC, FS, FSI, ARRAY1D, BC, FC, BZ, SZ, RV,
                              RP, RD, B, UCU, C} <: System{NDIMS}
     boundary_model       :: BM
     initial_condition    :: IC
@@ -50,6 +50,7 @@ struct OpenBoundarySPHSystem{BM, ELTYPE, NDIMS, IC, FS, FSI, ARRAY1D, BC, FC, BZ
     boundary_candidates  :: BC      # Array{UInt32, 1}: [particle]
     fluid_candidates     :: FC      # Array{UInt32, 1}: [particle]
     boundary_zone        :: BZ
+    shift_zone           :: SZ
     reference_velocity   :: RV
     reference_pressure   :: RP
     reference_density    :: RD
@@ -61,20 +62,21 @@ end
 function OpenBoundarySPHSystem(boundary_model, initial_condition, fluid_system,
                                fluid_system_index, smoothing_length, mass, density, volume,
                                pressure, boundary_candidates, fluid_candidates,
-                               boundary_zone, reference_velocity,
+                               boundary_zone, shift_zone, reference_velocity,
                                reference_pressure, reference_density, buffer,
                                update_callback_used, cache)
     OpenBoundarySPHSystem{typeof(boundary_model), eltype(mass), ndims(initial_condition),
                           typeof(initial_condition), typeof(fluid_system),
                           typeof(fluid_system_index), typeof(mass),
                           typeof(boundary_candidates), typeof(fluid_candidates),
-                          typeof(boundary_zone), typeof(reference_velocity),
-                          typeof(reference_pressure), typeof(reference_density),
-                          typeof(buffer), typeof(update_callback_used),
+                          typeof(boundary_zone), typeof(shift_zone),
+                          typeof(reference_velocity), typeof(reference_pressure),
+                          typeof(reference_density), typeof(buffer),
+                          typeof(update_callback_used),
                           typeof(cache)}(boundary_model, initial_condition, fluid_system,
                                          fluid_system_index, smoothing_length, mass,
                                          density, volume, pressure, boundary_candidates,
-                                         fluid_candidates, boundary_zone,
+                                         fluid_candidates, boundary_zone, shift_zone,
                                          reference_velocity, reference_pressure,
                                          reference_density, buffer, update_callback_used,
                                          cache)
@@ -83,6 +85,7 @@ end
 function OpenBoundarySPHSystem(boundary_zone::BoundaryZone;
                                fluid_system::FluidSystem,
                                buffer_size::Integer, boundary_model,
+                               shift_zone=nothing,
                                reference_velocity=nothing,
                                reference_pressure=nothing,
                                reference_density=nothing)
@@ -164,7 +167,7 @@ function OpenBoundarySPHSystem(boundary_zone::BoundaryZone;
     return OpenBoundarySPHSystem(boundary_model, initial_condition, fluid_system,
                                  fluid_system_index, smoothing_length, mass, density,
                                  volume, pressure, boundary_candidates, fluid_candidates,
-                                 boundary_zone, reference_velocity_,
+                                 boundary_zone, shift_zone, reference_velocity_,
                                  reference_pressure_, reference_density_, buffer,
                                  update_callback_used, cache)
 end
@@ -243,6 +246,10 @@ end
 
 function smoothing_length(system::OpenBoundarySPHSystem, particle)
     return system.smoothing_length
+end
+
+function system_smoothing_kernel(system::OpenBoundarySPHSystem)
+    return system.fluid_system.smoothing_kernel
 end
 
 @inline hydrodynamic_mass(system::OpenBoundarySPHSystem, particle) = system.mass[particle]
@@ -529,4 +536,9 @@ end
 
 function available_data(::OpenBoundarySPHSystem)
     return (:coordinates, :velocity, :density, :pressure)
+end
+
+function add_additional_acceleration!(dv_ode, v_ode, u_ode, system::OpenBoundarySPHSystem,
+                                      semi, t)
+    apply_shifting!(dv_ode, v_ode, u_ode, system, system.shift_zone, semi)
 end

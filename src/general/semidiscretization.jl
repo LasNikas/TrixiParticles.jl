@@ -485,6 +485,8 @@ function kick!(dv_ode, v_ode, u_ode, semi, t)
 
         @trixi_timeit timer() "source terms" add_source_terms!(dv_ode, v_ode, u_ode,
                                                                semi, t)
+
+        add_additional_accelerations!(dv_ode, v_ode, u_ode, semi, t)
     end
 
     return dv_ode
@@ -545,6 +547,16 @@ function update_nhs!(semi, u_ode)
         end
     end
 end
+
+function add_additional_accelerations!(dv_ode, v_ode, u_ode, semi, t)
+    foreach_system(semi) do system
+        add_additional_acceleration!(dv_ode, v_ode, u_ode, system, semi, t)
+    end
+
+    return dv_ode
+end
+
+add_additional_acceleration!(dv_ode, v_ode, u_ode, system, semi, t) = dv_ode
 
 function add_source_terms!(dv_ode, v_ode, u_ode, semi, t)
     foreach_system(semi) do system
@@ -945,6 +957,8 @@ function check_configuration(system::OpenBoundarySPHSystem, systems,
                             "that does not require an update for the first set of coordinates (e.g. `GridNeighborhoodSearch`). " *
                             "See the PointNeighbors.jl documentation for more details."))
     end
+
+    initialize_shift_zone!(system.shift_zone, system)
 end
 
 # After `adapt`, the system type information may change.
