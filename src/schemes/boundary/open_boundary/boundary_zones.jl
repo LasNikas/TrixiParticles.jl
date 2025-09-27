@@ -348,7 +348,7 @@ function set_up_boundary_zone(boundary_face, face_normal, density, particle_spac
     # First vector of `spanning_vectors` is normal to the boundary face.
     dot_face_normal = dot(normalize(spanning_set[:, 1]), face_normal)
 
-    if !isapprox(abs(dot_face_normal), 1, rtol=1e-5)
+    if !isapprox(abs(dot_face_normal), 1)
         throw(ArgumentError("`face_normal` is not normal to the boundary face"))
     end
 
