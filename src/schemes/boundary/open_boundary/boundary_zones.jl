@@ -147,19 +147,18 @@ bidirectional_flow = BoundaryZone(; boundary_face=face_vertices, face_normal,
 !!! warning "Experimental Implementation"
     This is an experimental feature and may change in any future releases.
 """
-struct BoundaryZone{IC, S, ZO, ZW, FD, FN, RP, R, PM}
+struct BoundaryZone{IC, S, ZO, ZW, FD, FN, ELTYPE, R, PM}
     initial_condition :: IC
     spanning_set      :: S
     zone_origin       :: ZO
     zone_width        :: ZW
     flow_direction    :: FD
     face_normal       :: FN
-    rest_pressure     :: RP # Only required for `BoundaryModelDynamicalPressureZhang`
+    rest_pressure     :: ELTYPE # Only required for `BoundaryModelDynamicalPressureZhang`
     reference_values  :: R
     pressure_model    :: PM
     # Note that the following can't be static type parameters, as all boundary zones in a system
     # must have the same type, so that we can loop over them in a type-stable way.
-    impose_full_velocity    :: Bool
     average_inflow_velocity :: Bool
     prescribed_density      :: Bool
     prescribed_pressure     :: Bool
@@ -169,7 +168,6 @@ end
 function BoundaryZone(; boundary_face, face_normal, density, particle_spacing,
                       initial_condition=nothing, extrude_geometry=nothing,
                       open_boundary_layers::Integer, average_inflow_velocity=true,
-                      impose_full_velocity=true,
                       boundary_type=BidirectionalFlow(),
                       pressure_model=nothing,
                       rest_pressure=zero(eltype(density)),
@@ -247,21 +245,14 @@ function BoundaryZone(; boundary_face, face_normal, density, particle_spacing,
     reference_values = (reference_velocity=velocity_ref, reference_pressure=pressure_ref,
                         reference_density=density_ref)
 
-    if isnothing(pressure_model)
-        # Create a "dummy" pressure model for type stability
-        # TODO: What if we have different kinds of pressure models?
-        pressure_model_ = RCRWindkesselModel(; characteristic_resistance=zero(ELTYPE),
-                                             peripheral_resistance=zero(ELTYPE),
-                                             compliance=zero(ELTYPE),
-                                             is_prescribed=false)
-    else
-        pressure_model_ = pressure_model
-    end
-
     coordinates_svector = reinterpret(reshape, SVector{NDIMS, ELTYPE}, ic.coordinates)
 
     if prescribed_pressure
-        ic.pressure .= pressure_ref.(coordinates_svector, 0)
+        if isnothing(pressure_model)
+            ic.pressure .= pressure_ref.(coordinates_svector, 0)
+        else
+            throw(ArgumentError("Setting prescribed pressure together with a pressure model is not supported."))
+        end
     end
     if prescribed_density
         ic.density .= density_ref.(coordinates_svector, 0)
@@ -272,9 +263,8 @@ function BoundaryZone(; boundary_face, face_normal, density, particle_spacing,
     end
 
     return BoundaryZone(ic, spanning_set_, zone_origin, zone_width,
-                        flow_direction, face_normal_, Ref(rest_pressure), reference_values,
-                        pressure_model_, impose_full_velocity,
-                        average_inflow_velocity, prescribed_density,
+                        flow_direction, face_normal_, rest_pressure, reference_values,
+                        pressure_model, average_inflow_velocity, prescribed_density,
                         prescribed_pressure, prescribed_velocity)
 end
 
@@ -307,6 +297,10 @@ function Base.show(io::IO, ::MIME"text/plain", boundary_zone::BoundaryZone)
         summary_line(io, "boundary type", boundary_type_name(boundary_zone))
         summary_line(io, "#particles", nparticles(boundary_zone.initial_condition))
         summary_line(io, "width", round(boundary_zone.zone_width, digits=6))
+        if !isnothing(boundary_zone.pressure_model) &&
+           boundary_zone.pressure_model.is_prescribed
+            summary_line(io, "pressure model", type2string(boundary_zone.pressure_model))
+        end
         summary_footer(io)
     end
 end

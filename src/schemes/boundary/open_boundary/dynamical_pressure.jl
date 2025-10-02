@@ -76,7 +76,7 @@ end
 @inline function impose_rest_pressure!(v, system, particle,
                                        boundary_model::BoundaryModelDynamicalPressureZhang)
     boundary_zone = current_boundary_zone(system, particle)
-    set_particle_pressure!(v, system, particle, boundary_zone.rest_pressure[])
+    set_particle_pressure!(v, system, particle, boundary_zone.rest_pressure)
 end
 
 function write_v0!(v0, system::OpenBoundarySystem, ::BoundaryModelDynamicalPressureZhang)
@@ -120,7 +120,9 @@ function reference_pressure(boundary_zone, v,
         # `pressure_reference_values[zone_id](pos, t)`, but in a type-stable way
         return apply_ith_function(pressure_reference_values, zone_id, pos, t)
     else
-        return rest_pressure[]
+        # Return either the rest pressure or a pressure computed by a pressure model
+        return imposed_pressure(system, system.pressure_model_values, boundary_zone,
+                                rest_pressure, particle)
     end
 end
 
@@ -164,7 +166,7 @@ function update_boundary_quantities!(system,
 
     @threaded semi for particle in each_integrated_particle(system)
         boundary_zone = current_boundary_zone(system, particle)
-        (; prescribed_density, prescribed_velocity, impose_full_velocity) = boundary_zone
+        (; prescribed_density, prescribed_velocity) = boundary_zone
 
         particle_coords = current_coords(u, system, particle)
 
