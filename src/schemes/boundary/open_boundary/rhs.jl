@@ -81,7 +81,7 @@ function interact!(dv, v_particle_system, u_particle_system,
     # @threaded semi for particle in each_integrated_particle(particle_system)
     #     boundary_zone = current_boundary_zone(particle_system, particle)
     #
-    #     This ensures that, even during stages, the velocity remains aligned with the boundary zone
+    # #     This ensures that, even during stages, the velocity remains aligned with the boundary zone
     #     project_velocity_on_face_normal!(dv, particle_system, particle, boundary_zone,
     #                                       boundary_model)
     # end

@@ -147,14 +147,14 @@ bidirectional_flow = BoundaryZone(; boundary_face=face_vertices, face_normal,
 !!! warning "Experimental Implementation"
     This is an experimental feature and may change in any future releases.
 """
-struct BoundaryZone{IC, S, ZO, ZW, FD, FN, ELTYPE, R}
+struct BoundaryZone{IC, S, ZO, ZW, FD, FN, RP, R}
     initial_condition :: IC
     spanning_set      :: S
     zone_origin       :: ZO
     zone_width        :: ZW
     flow_direction    :: FD
     face_normal       :: FN
-    rest_pressure     :: ELTYPE # Only required for `BoundaryModelDynamicalPressureZhang`
+    rest_pressure     :: RP # Only required for `BoundaryModelDynamicalPressureZhang`
     reference_values  :: R
     # Note that the following can't be static type parameters, as all boundary zones in a system
     # must have the same type, so that we can loop over them in a type-stable way.
@@ -162,13 +162,14 @@ struct BoundaryZone{IC, S, ZO, ZW, FD, FN, ELTYPE, R}
     prescribed_density      :: Bool
     prescribed_pressure     :: Bool
     prescribed_velocity     :: Bool
+    set_avg_pressure        :: Bool
 end
 
 function BoundaryZone(; boundary_face, face_normal, density, particle_spacing,
                       initial_condition=nothing, extrude_geometry=nothing,
                       open_boundary_layers::Integer, average_inflow_velocity=true,
                       boundary_type=BidirectionalFlow(),
-                      rest_pressure=zero(eltype(density)),
+                      rest_pressure=zero(eltype(density)), set_avg_pressure=false,
                       reference_density=nothing, reference_pressure=nothing,
                       reference_velocity=nothing)
     if open_boundary_layers <= 0
@@ -257,9 +258,9 @@ function BoundaryZone(; boundary_face, face_normal, density, particle_spacing,
     end
 
     return BoundaryZone(ic, spanning_set_, zone_origin, zone_width,
-                        flow_direction, face_normal_, rest_pressure, reference_values,
+                        flow_direction, face_normal_, Ref(rest_pressure), reference_values,
                         average_inflow_velocity, prescribed_density, prescribed_pressure,
-                        prescribed_velocity)
+                        prescribed_velocity, set_avg_pressure)
 end
 
 function boundary_type_name(boundary_zone::BoundaryZone)

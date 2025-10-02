@@ -76,7 +76,7 @@ end
 @inline function impose_rest_pressure!(v, system, particle,
                                        boundary_model::BoundaryModelDynamicalPressureZhang)
     boundary_zone = current_boundary_zone(system, particle)
-    set_particle_pressure!(v, system, particle, boundary_zone.rest_pressure)
+    set_particle_pressure!(v, system, particle, boundary_zone.rest_pressure[])
 end
 
 function write_v0!(v0, system::OpenBoundarySystem, ::BoundaryModelDynamicalPressureZhang)
@@ -120,7 +120,7 @@ function reference_pressure(boundary_zone, v,
         # `pressure_reference_values[zone_id](pos, t)`, but in a type-stable way
         return apply_ith_function(pressure_reference_values, zone_id, pos, t)
     else
-        return rest_pressure
+        return rest_pressure[]
     end
 end
 
@@ -161,6 +161,10 @@ function update_boundary_quantities!(system,
                                      boundary_model::BoundaryModelDynamicalPressureZhang,
                                      v, u, v_ode, u_ode, semi, t)
     (; pressure_boundary) = system.cache
+
+    v_fluid = wrap_v(v_ode, system.fluid_system, semi)
+    u_fluid = wrap_u(u_ode, system.fluid_system, semi)
+    extrapolate_pressures!(system, v, v_fluid, u, u_fluid, semi)
 
     @threaded semi for particle in each_integrated_particle(system)
         boundary_zone = current_boundary_zone(system, particle)
@@ -226,4 +230,27 @@ end
 
 function inverse_state_equation!(density, density_rest, state_equation, pressure, particle)
     return inverse_state_equation!(density, state_equation, pressure, particle)
+end
+
+function extrapolate_pressures!(system, v, v_fluid, u, u_fluid, semi)
+    (; fluid_system) = system
+
+    for boundary_zone in system.boundary_zones
+        if boundary_zone.set_avg_pressure
+            (; zone_origin, face_normal) = boundary_zone
+            max_dist = compact_support(system, system)
+
+            candidates = findall(x -> dot(x - zone_origin, face_normal) <= max_dist,
+                                 reinterpret(reshape, SVector{ndims(system), eltype(u)},
+                                             u_fluid))
+
+            avg_pressure = sum(candidates) do particle
+                return current_pressure(v_fluid, fluid_system, particle) /
+                       length(candidates)
+            end
+            boundary_zone.rest_pressure[] = avg_pressure
+        end
+    end
+
+    return system
 end

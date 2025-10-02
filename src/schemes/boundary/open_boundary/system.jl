@@ -112,7 +112,8 @@ function OpenBoundarySystem(boundary_zones::Union{BoundaryZone, Nothing}...;
                                                   zone.average_inflow_velocity,
                                                   zone.prescribed_density,
                                                   zone.prescribed_pressure,
-                                                  zone.prescribed_velocity),
+                                                  zone.prescribed_velocity,
+                                                  zone.set_avg_pressure),
                              boundary_zones)
 
     return OpenBoundarySystem(boundary_model, initial_conditions, fluid_system,
