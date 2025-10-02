@@ -16,8 +16,8 @@ Open boundary system for in- and outflow particles.
                            when using [`BoundaryModelDynamicalPressureZhang`](@ref).
                            Defaults to the formulation from `fluid_system` if applicable; otherwise, `nothing`.
 - `shifting_technique`: [Shifting technique](@ref shifting) or [transport velocity formulation](@ref transport_velocity_formulation)
-                        for this system. Defaults to the technique from `fluid_system`.
-                        Supported only for [`BoundaryModelDynamicalPressureZhang`](@ref), yet.
+                        for this system. Defaults to the technique used by `fluid_system`.
+                        As of now, only supported for [`BoundaryModelDynamicalPressureZhang`](@ref).
 
 !!! warning "Experimental Implementation"
     This is an experimental feature and may change in any future releases.
@@ -401,10 +401,15 @@ end
 @inline function convert_particle!(system::OpenBoundarySystem, fluid_system,
                                    boundary_zone, particle, particle_new,
                                    v, u, v_fluid, u_fluid)
+    # Position relative to the origin of the transition face
     relative_position = current_coords(u, system, particle) - boundary_zone.zone_origin
 
     # Check if particle is in- or outside the fluid domain.
-    if signbit(dot(relative_position, boundary_zone.face_normal))
+    # `face_normal` is always pointing into the fluid domain.
+    # Since this function is called for a particle that left the boundary zone,
+    # it is sufficient to check if the dot product between the relative position and the face normal is negative
+    # to determine if it exited the boundary zone through the free surface (outflow).
+    if dot(relative_position, boundary_zone.face_normal) < 0
         # Particle is outside the fluid domain
         deactivate_particle!(system, particle, u)
 
@@ -515,6 +520,8 @@ function available_data(::OpenBoundarySystem)
     return (:coordinates, :velocity, :density, :pressure)
 end
 
+# One face of the boundary zone is the transition to the fluid domain.
+# The face opposite to this transition face is a free surface.
 @inline function modify_shifting_at_free_surfaces!(system::OpenBoundarySystem, u, semi)
     (; fluid_system, cache) = system
 
@@ -529,7 +536,11 @@ end
         dist_free_surface = boundary_zone.zone_width - dist_to_transition
 
         if dist_free_surface < compact_support(fluid_system, fluid_system)
-            # Disable shifting for this particle
+            # Disable shifting for this particle.
+            # Note that Sun et al. 2017 propose a more sophisticated approach with a transition phase
+            # where only the component orthogonal to the surface normal is kept and the tangential
+            # component is set to zero. However, we assume laminar flow in the boundary zone,
+            # so we simply disable shifting completely.
             for dim in 1:ndims(system)
                 cache.delta_v[dim, particle] = zero(eltype(system))
             end

@@ -76,8 +76,11 @@ There are three ways to specify the actual shape of the boundary zone:
                         and time to its pressure, or a scalar for a constant pressure over all particles.
 - `reference_density`: Reference density is either a function mapping each particle's coordinates
                        and time to its density, or a scalar for a constant density over all particles.
-- `rest_pressure=0.0`: For `BoundaryModelDynamicalPressureZhang`, a rest pressure is required when the pressure is not prescribed (default is zero).
-                       This is analogous to the pressure provided to the `FluidSystem` via its `InitialCondition`.
+- `rest_pressure=0.0`: For `BoundaryModelDynamicalPressureZhang`, a rest pressure is required when the pressure is not prescribed.
+                       This should match the rest pressure of the fluid system.
+                       Per default it is set to zero (assuming a gauge pressure system).
+                       - For `EntropicallyDampedSPHSystem`: Use the initial pressure from the `InitialCondition`
+                       - For `WeaklyCompressibleSPHSystem`: Use the background pressure from the equation of state
 
 !!! note "Note"
     The reference values (`reference_velocity`, `reference_pressure`, `reference_density`)
@@ -448,7 +451,11 @@ function update_boundary_zone_indices!(system, u, boundary_zones, semi)
             end
         end
 
-        @assert system.boundary_zone_indices[particle]!=0 "No boundary zone found for active buffer particle"
+        # This only occurs if `face_normal` is not exactly normal to the `boundary_face`.
+        # In such cases, particles that are actually outside the simulation domain (outflow particles)
+        # may be incorrectly kept active as inflow particles and therefore cannot be assigned to any boundary zone.
+        # This issue should not occur and has been fixed in https://github.com/trixi-framework/TrixiParticles.jl/pull/926 .
+        @assert system.boundary_zone_indices[particle] != 0 "No boundary zone found for active buffer particle"
     end
 
     return system
