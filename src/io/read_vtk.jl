@@ -31,9 +31,10 @@ ic = vtk2trixi(joinpath("out", "rectangular.vtu"))
 │ eltype: …………………………………………………………… Float64                                                          │
 │ coordinate eltype: ……………………………… Float64                                                          │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-````
+```
 """
-function vtk2trixi(file)
+function vtk2trixi(file; element_type=Float64)
+    ELTYPE = element_type
     vtk_file = ReadVTK.VTKFile(file)
 
     # Retrieve data fields (e.g., pressure, velocity, ...)
@@ -42,7 +43,7 @@ function vtk2trixi(file)
 
     # Retrieve fields
     ndims = first(ReadVTK.get_data(field_data["ndims"]))
-    coordinates = ReadVTK.get_points(vtk_file)[1:ndims, :]
+    coordinates = convert.(ELTYPE, ReadVTK.get_points(vtk_file)[1:ndims, :])
 
     fields = ["velocity", "density", "pressure", "mass", "particle_spacing"]
     results = Dict{String, Array{Float64}}()
@@ -52,11 +53,11 @@ function vtk2trixi(file)
         all_keys = keys(point_data)
         idx = findfirst(k -> occursin(field, k), all_keys)
         if idx !== nothing
-            results[field] = ReadVTK.get_data(point_data[all_keys[idx]])
+            results[field] = convert.(ELTYPE, ReadVTK.get_data(point_data[all_keys[idx]]))
         else
             # Use zeros as default values when a field is missing
             results[field] = field in ["mass"] ?
-                             zeros(size(coordinates, 2)) : zero(coordinates)
+                             zeros(ELTYPE, size(coordinates, 2)) : zero(coordinates)
             @info "No '$field' field found in VTK file. Will be set to zero."
         end
     end
@@ -65,7 +66,8 @@ function vtk2trixi(file)
                        first(results["particle_spacing"]) :
                        results["particle_spacing"]
 
-    return InitialCondition(; coordinates, particle_spacing=particle_spacing,
+    return InitialCondition(; coordinates,
+                            particle_spacing=convert(ELTYPE, particle_spacing),
                             velocity=results["velocity"],
                             mass=results["mass"],
                             density=results["density"],

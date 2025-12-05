@@ -64,6 +64,7 @@ end
 function OpenBoundarySystem(boundary_zones::Union{BoundaryZone, Nothing}...;
                             fluid_system::AbstractFluidSystem, buffer_size::Integer,
                             boundary_model,
+                            deactivate_isolated_particles=false,
                             pressure_acceleration=boundary_model isa
                                                   BoundaryModelDynamicalPressureZhang ?
                                                   fluid_system.pressure_acceleration_formulation :
@@ -82,7 +83,9 @@ function OpenBoundarySystem(boundary_zones::Union{BoundaryZone, Nothing}...;
     mass = copy(initial_conditions.mass)
     volume = similar(initial_conditions.density)
 
-    cache = (;
+    neighbor_counter = deactivate_isolated_particles ?
+                       zeros(Int, nparticles(initial_conditions)) : nothing
+    cache = (; neighbor_counter=neighbor_counter,
              create_cache_shifting(initial_conditions, shifting_technique)...,
              create_cache_open_boundary(boundary_model, fluid_system, initial_conditions,
                                         boundary_zones_)...)
@@ -290,6 +293,12 @@ end
     return du
 end
 
+function update_positions!(system::OpenBoundarySystem, v, u, v_ode, u_ode, semi, t)
+    cell_list = get_neighborhood_search(system, semi).cell_list
+    deactivate_out_of_bounds_particles!(system, buffer(system), cell_list, u, semi)
+end
+
+
 function update_boundary_interpolation!(system::OpenBoundarySystem, v, u, v_ode, u_ode,
                                         semi, t)
     update_boundary_model!(system, system.boundary_model, v, u, v_ode, u_ode, semi, t)
@@ -304,6 +313,8 @@ function update_open_boundary_eachstep!(system::OpenBoundarySystem, v_ode, u_ode
     @trixi_timeit timer() "update open boundary" begin
         u = wrap_u(u_ode, system, semi)
         v = wrap_v(v_ode, system, semi)
+
+        calculate_neighbor_count!(system, shifting_technique(system), u, semi)
 
         @trixi_timeit timer() "check domain" check_domain!(system, v, u, v_ode, u_ode, semi)
 
@@ -418,12 +429,31 @@ end
         return system
     end
 
+    if is_isolated(system, shifting_technique(system), particle)
+        deactivate_particle!(system, particle, u)
+
+        return system
+    end
+
     # Activate a new particle in simulation domain
     transfer_particle!(fluid_system, system, particle, particle_new, v_fluid, u_fluid, v, u)
 
-    # Reset position of boundary particle
+    # Reset position of boundary particle back into the boundary zone.
+    # Particles lying almost exactly on the `boundary_face` might be reset
+    # slightly outside the boundary zone.
+    # Thus, we use a shortened vector to account for numerical precision issues.
+    reset_dist = boundary_zone.zone_width - eps(boundary_zone.zone_width)
+    reset_vector = -boundary_zone.face_normal * reset_dist
     for dim in 1:ndims(system)
-        u[dim, particle] += boundary_zone.spanning_set[1][dim]
+        u[dim, particle] += reset_vector[dim]
+    end
+
+    # Verify the particle remains inside the boundary zone after the reset; deactivate it if not.
+    particle_coords = current_coords(u, system, particle)
+    if !is_in_boundary_zone(boundary_zone, particle_coords)
+        deactivate_particle!(system, particle, u)
+
+        return system
     end
 
     impose_rest_density!(v, system, particle, system.boundary_model)
@@ -538,16 +568,62 @@ end
         dist_free_surface = boundary_zone.zone_width - dist_to_transition
 
         if dist_free_surface < compact_support(fluid_system, fluid_system)
-            # Disable shifting for this particle.
+            # Ramp up shifting velocity for this particle.
             # Note that Sun et al. 2017 propose a more sophisticated approach with a transition phase
             # where only the component orthogonal to the surface normal is kept and the tangential
-            # component is set to zero. However, we assume laminar flow in the boundary zone,
-            # so we simply disable shifting completely.
+            # component is set to zero.
+            kernel_max = smoothing_kernel(system, 0, particle)
+            support_gap = compact_support(fluid_system, fluid_system) - dist_free_surface
+            shifting_weight = smoothing_kernel(system, support_gap, particle) / kernel_max
+            delta_v_ramped = delta_v(system, particle) * shifting_weight
             for dim in 1:ndims(system)
-                cache.delta_v[dim, particle] = zero(eltype(system))
+                cache.delta_v[dim, particle] = delta_v_ramped[dim]
             end
         end
     end
 
     return system
+end
+
+@inline calculate_neighbor_count!(system, ::Nothing, u, semi) = system
+
+@inline function calculate_neighbor_count!(system, ::AbstractShiftingTechnique, u, semi)
+    (; neighbor_counter) = system.cache
+
+    # Skip when `deactivate_isolated_particles` is not activated
+    isnothing(neighbor_counter) && return system
+
+    set_zero!(neighbor_counter)
+
+    # Loop over all pairs of particles and neighbors within the kernel cutoff.
+    system_coords = current_coordinates(u, system)
+    foreach_point_neighbor(system, system, system_coords, system_coords, semi;
+                           points=each_integrated_particle(system)) do particle,
+                                                                       neighbor,
+                                                                       pos_diff,
+                                                                       distance
+        (particle == neighbor) && return
+        neighbor_counter[particle] += 1
+    end
+
+    return system
+end
+
+@inline is_isolated(system, ::Nothing, particle) = false
+
+@inline function is_isolated(system, ::AbstractShiftingTechnique, particle)
+    (; particle_spacing) = system.initial_condition
+    (; neighbor_counter) = system.cache
+
+    # Skip when `deactivate_isolated_particles` is not activated
+    isnothing(neighbor_counter) && return false
+
+    min_neighbors = ideal_neighbor_count(Val(ndims(system)), particle_spacing,
+                                         compact_support(system, system)) / 10
+
+    if neighbor_counter[particle] < min_neighbors
+        return true
+    end
+
+    return false
 end
