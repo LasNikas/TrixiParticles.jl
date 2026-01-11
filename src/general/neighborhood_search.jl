@@ -30,7 +30,7 @@ function deactivate_out_of_bounds_particles!(system, ::SystemBuffer,
     end
 
     if count(system.buffer.active_particle) != system.buffer.active_particle_count[]
-        update_system_buffer!(system.buffer, semi)
+        update_system_buffer!(system.buffer)
     end
 
     return system
