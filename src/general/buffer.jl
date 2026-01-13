@@ -64,13 +64,21 @@ end
     return view(buffer.eachparticle, 1:buffer.active_particle_count[])
 end
 
-@inline function deactivate_particle!(system, particle, u)
+@inline function deactivate_particle!(system, particle, v, u)
     (; active_particle) = system.buffer
 
     # Set particle far away from simulation domain
     for dim in 1:ndims(system)
         # Inf or NaN causes instability outcome.
         u[dim, particle] = eltype(system)(1e16)
+    end
+
+    # To ensure that the velocity of an inactive particle does not dominate the time step
+    # in adaptive time integrators, set this velocity to zero.
+    # Additionally, this enables map-reduce operations for `v_max` computation
+    # without having to distinguish inactive particles.
+    for dim in 1:ndims(system)
+        v[dim, particle] = zero(eltype(system))
     end
 
     # `deactivate_particle!` and `active_particle[particle] = true`
