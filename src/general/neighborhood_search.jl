@@ -10,10 +10,10 @@ function PointNeighbors.foreach_point_neighbor(f, system, neighbor_system,
                            points, parallelization_backend)
 end
 
-deactivate_out_of_bounds_particles!(system, ::Nothing, nhs, u, semi) = system
+deactivate_out_of_bounds_particles!(system, ::Nothing, nhs, v, u, semi) = system
 
 function deactivate_out_of_bounds_particles!(system, ::SystemBuffer,
-                                             cell_list::FullGridCellList, u, semi)
+                                             cell_list::FullGridCellList, v, u, semi)
     (; min_corner, max_corner) = cell_list
     (; cell_size) = get_neighborhood_search(system, semi)
 
@@ -25,7 +25,7 @@ function deactivate_out_of_bounds_particles!(system, ::SystemBuffer,
         particle_position = current_coords(u, system, particle)
 
         if !all(min_corner_ .<= particle_position .<= max_corner_)
-            deactivate_particle!(system, particle, u)
+            deactivate_particle!(system, particle, v, u)
         end
     end
 
