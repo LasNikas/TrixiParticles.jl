@@ -128,14 +128,16 @@ function update_boundary_model!(system, boundary_model::BoundaryModelDynamicalPr
                                 v, u, v_ode, u_ode, semi, t)
     (; pressure_boundary) = system.cache
 
-    compute_pressure!(system, system.fluid_system, v, semi)
+    @trixi_timeit timer() "update `BoundaryModelDynamicalPressureZhang`" begin
+        compute_pressure!(system, system.fluid_system, v, semi)
 
-    @threaded semi for particle in each_integrated_particle(system)
-        boundary_zone = current_boundary_zone(system, particle)
-        particle_coords = current_coords(u, system, particle)
+        @threaded semi for particle in each_integrated_particle(system)
+            boundary_zone = current_boundary_zone(system, particle)
+            particle_coords = current_coords(u, system, particle)
 
-        pressure_boundary[particle] = reference_pressure(boundary_zone, v, system,
-                                                         particle, particle_coords, t)
+            pressure_boundary[particle] = reference_pressure(boundary_zone, v, system,
+                                                             particle, particle_coords, t)
+        end
     end
 
     return system
