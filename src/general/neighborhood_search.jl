@@ -17,20 +17,23 @@ function deactivate_out_of_bounds_particles!(system, ::SystemBuffer,
     (; min_corner, max_corner) = cell_list
     (; cell_size) = get_neighborhood_search(system, semi)
 
-    # Remove the padding layer (see comment in PointNeighbors: full_grid.jl line 60)
-    min_corner_ = min_corner .+ 1001 // 1000 .* cell_size
-    max_corner_ = max_corner .- 1001 // 1000 .* cell_size
+    @trixi_timeit timer() "deactivate out of bounds particle" begin
 
-    @threaded semi for particle in each_integrated_particle(system)
-        particle_position = current_coords(u, system, particle)
+        # Remove the padding layer (see comment in PointNeighbors: full_grid.jl line 60)
+        min_corner_ = min_corner .+ 1001 // 1000 .* cell_size
+        max_corner_ = max_corner .- 1001 // 1000 .* cell_size
 
-        if !all(min_corner_ .<= particle_position .<= max_corner_)
-            deactivate_particle!(system, particle, v, u)
+        @threaded semi for particle in each_integrated_particle(system)
+            particle_position = current_coords(u, system, particle)
+
+            if !all(min_corner_ .<= particle_position .<= max_corner_)
+                deactivate_particle!(system, particle, v, u)
+            end
         end
-    end
 
-    if count(system.buffer.active_particle) != system.buffer.active_particle_count[]
-        update_system_buffer!(system.buffer)
+        if count(system.buffer.active_particle) != system.buffer.active_particle_count[]
+            update_system_buffer!(system.buffer)
+        end
     end
 
     return system
