@@ -74,6 +74,7 @@ end
 function OpenBoundarySystem(boundary_zones::Union{BoundaryZone, Nothing}...;
                             fluid_system::AbstractFluidSystem, buffer_size::Integer,
                             boundary_model, calculate_flow_rate=false,
+                            deactivate_isolated_particles=false,
                             pressure_acceleration=boundary_model isa
                                                   BoundaryModelDynamicalPressureZhang ?
                                                   fluid_system.pressure_acceleration_formulation :
@@ -95,7 +96,9 @@ function OpenBoundarySystem(boundary_zones::Union{BoundaryZone, Nothing}...;
     mass = copy(initial_conditions.mass)
     volume = similar(initial_conditions.density)
 
-    cache = (;
+    neighbor_counter = deactivate_isolated_particles ?
+                       zeros(Int, nparticles(initial_conditions)) : nothing
+    cache = (; neighbor_counter=neighbor_counter,
              create_cache_shifting(initial_conditions, shifting_technique)...,
              create_cache_open_boundary(boundary_model, fluid_system, initial_conditions,
                                         density_diffusion, calculate_flow_rate,
@@ -350,6 +353,8 @@ function update_open_boundary_eachstep!(system::OpenBoundarySystem, v_ode, u_ode
     @trixi_timeit timer() "update open boundary" begin
         u = wrap_u(u_ode, system, semi)
         v = wrap_v(v_ode, system, semi)
+
+        deactivate_isolated_particle!(system, shifting_technique(system), v, u, semi)
 
         # This must be called before `update_pressure_model!` and `check_domain!`
         # to ensure quantities remain consistent with the current simulation state.
@@ -643,6 +648,55 @@ end
     end
 
     return system
+end
+
+@inline deactivate_isolated_particle!(system, ::Nothing, v, u, semi) = system
+
+@inline function deactivate_isolated_particle!(system, ::AbstractShiftingTechnique, v, u, semi)
+    (; neighbor_counter) = system.cache
+
+    # Skip when `deactivate_isolated_particles` is not activated
+    isnothing(neighbor_counter) && return system
+
+    set_zero!(neighbor_counter)
+
+    # Loop over all pairs of particles and neighbors within the kernel cutoff.
+    system_coords = current_coordinates(u, system)
+    foreach_point_neighbor(system, system, system_coords, system_coords, semi;
+                           points=each_integrated_particle(system)) do particle,
+                                                                       neighbor,
+                                                                       pos_diff,
+                                                                       distance
+        neighbor_counter[particle] += particle == neighbor ? 0 : 1
+    end
+
+    @threaded semi for particle in each_integrated_particle(system)
+        if is_isolated(system, shifting_technique(system), particle)
+            deactivate_particle!(system, particle, v, u)
+
+            return system
+        end
+    end
+
+    update_system_buffer!(system.buffer)
+
+    return system
+end
+
+@inline is_isolated(system, ::Nothing, particle) = false
+
+@inline function is_isolated(system, ::AbstractShiftingTechnique, particle)
+    (; particle_spacing) = system.initial_condition
+    (; neighbor_counter) = system.cache
+
+    min_neighbors = ideal_neighbor_count(Val(ndims(system)), particle_spacing,
+                                         compact_support(system, system)) / 10
+
+    if neighbor_counter[particle] < min_neighbors
+        return true
+    end
+
+    return false
 end
 
 function interpolate_velocity!(system::OpenBoundarySystem, boundary_zone,
