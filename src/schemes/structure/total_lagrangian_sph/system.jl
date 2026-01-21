@@ -572,6 +572,17 @@ function restart_with!(system::TotalLagrangianSPHSystem, v, u)
     restart_with!(system, system.boundary_model, v, u)
 end
 
+function restart_u(system::AbstractStructureSystem, data)
+    # TODO: Is this correct?
+    # data.coordinates = coords_integrated
+    return data.coordinates[:, each_integrated_particle(system)]
+end
+
+function restart_v(system::AbstractStructureSystem, data)
+    # TODO: Is this correct?
+    return data.velocity[:, each_integrated_particle(system)]
+end
+
 # An explanation of these equation can be found in
 # J. Lubliner, 2008. Plasticity theory.
 # See here below Equation 5.3.21 for the equation for the equivalent stress.
@@ -624,6 +635,23 @@ function cauchy_stress(system::TotalLagrangianSPHSystem)
     end
 
     return cauchy_stress_tensors
+end
+
+function calculate_dt(v_ode, u_ode, cfl_number, system::TotalLagrangianSPHSystem, semi)
+    # TODO variable smoothing length
+    smoothing_length_ = initial_smoothing_length(system)
+
+    # Compute bulk modulus from Young's modulus and Poisson's ratio.
+    # See the table at the end of https://en.wikipedia.org/wiki/Lam%C3%A9_parameters
+    # TODO Should we compute the sound speed per particle and then use the maximum?
+    E = maximum(system.young_modulus)
+    K = E / (ndims(system) * (1 - 2 * maximum(system.poisson_ratio)))
+
+    # Newton–Laplace equation
+    sound_speed = sqrt(K / minimum(system.material_density))
+
+    # According to Eq. 19 in Sun et al. (2021) "An accurate FSI-SPH modeling..."
+    return cfl_number * smoothing_length_ / sound_speed
 end
 
 # To account for boundary effects in the viscosity term of the RHS, use the viscosity model

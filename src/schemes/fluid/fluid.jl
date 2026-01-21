@@ -115,6 +115,11 @@ end
 
 @inline acceleration_source(system::AbstractFluidSystem) = system.acceleration
 
+function update_positions!(system::AbstractFluidSystem, v, u, v_ode, u_ode, semi, t)
+    cell_list = get_neighborhood_search(system, semi).cell_list
+    deactivate_out_of_bounds_particles!(system, buffer(system), cell_list, v, u, semi)
+end
+
 function compute_density!(system, u, u_ode, semi, ::ContinuityDensity)
     # No density update with `ContinuityDensity`
     return system
@@ -166,7 +171,7 @@ end
 function calculate_dt(v_ode, u_ode, cfl_number, system::AbstractFluidSystem, semi)
     (; viscosity, acceleration, surface_tension) = system
 
-    # TODO
+    # TODO variable smoothing length
     smoothing_length_ = initial_smoothing_length(system)
 
     dt_viscosity = 0.125 * smoothing_length_^2
@@ -218,6 +223,47 @@ end
 
 @inline function surface_normal_method(system)
     return nothing
+end
+
+function restart_u(system::AbstractFluidSystem, data)
+    coords_total = zeros(coordinates_eltype(system), u_nvariables(system),
+                         n_integrated_particles(system))
+    coords_total .= coordinates_eltype(system)(1e16)
+
+    coords_active = data.coordinates
+
+    for particle in axes(coords_active, 2)
+        for dim in 1:ndims(system)
+            coords_total[dim, particle] = coords_active[dim, particle]
+        end
+    end
+
+    if !isnothing(buffer(system))
+        system.buffer.active_particle .= false
+        system.buffer.active_particle[1:size(coords_active, 2)] .= true
+    end
+
+    update_system_buffer!(system.buffer)
+
+    return coords_total
+end
+
+function restart_v(system::AbstractFluidSystem, data)
+    velocity_total = zeros(eltype(system), v_nvariables(system),
+                           n_integrated_particles(system))
+    velocity_active = zeros(eltype(system), v_nvariables(system), size(data.velocity, 2))
+
+    velocity_active[1:ndims(system), :] = data.velocity
+    write_density_and_pressure!(velocity_active, system, density_calculator(system),
+                                data.pressure, data.density)
+
+    for particle in axes(velocity_active, 2)
+        for i in axes(velocity_active, 1)
+            velocity_total[i, particle] = velocity_active[i, particle]
+        end
+    end
+
+    return velocity_total
 end
 
 function system_data(system::AbstractFluidSystem, dv_ode, du_ode, v_ode, u_ode, semi)

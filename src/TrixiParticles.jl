@@ -59,6 +59,7 @@ include("general/semidiscretization.jl")
 include("general/gpu.jl")
 include("preprocessing/preprocessing.jl")
 include("io/io.jl")
+include("general/restart.jl")
 include("visualization/recipes_plots.jl")
 
 export Semidiscretization, semidiscretize, restart_with!
@@ -69,7 +70,7 @@ export WeaklyCompressibleSPHSystem, EntropicallyDampedSPHSystem, TotalLagrangian
 export BoundaryZone, InFlow, OutFlow, BidirectionalFlow
 export InfoCallback, SolutionSavingCallback, DensityReinitializationCallback,
        PostprocessCallback, StepsizeCallback, UpdateCallback, SteadyStateReachedCallback,
-       SplitIntegrationCallback
+       SplitIntegrationCallback, SortingCallback
 export ContinuityDensity, SummationDensity
 export PenaltyForceGanzenmueller, TransportVelocityAdami, ParticleShiftingTechnique,
        ParticleShiftingTechniqueSun2017, ConsistentShiftingSun2019,
