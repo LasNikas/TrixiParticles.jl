@@ -47,9 +47,6 @@ To create a new release for TrixiParticles.jl, perform the following steps:
 5) Edit the `version` string in the
    [`Project.toml`](https://github.com/trixi-framework/TrixiParticles.jl/blob/main/Project.toml)
    and set it to the new version. Push/merge this change to `main`.
-5) Edit the `version` string in the
-   [`Project.toml`](https://github.com/trixi-framework/TrixiParticles.jl/blob/main/Project.toml)
-   and set it to the new version. Push/merge this change to `main`.
 6) Go to GitHub and add a comment to the commit that you would like to become the new
    release (typically this will be the commit where you just updated the version). You can
    comment on a commit by going to the
