@@ -1,6 +1,7 @@
 mutable struct InfoCallback
     start_time::Float64
     interval::Int
+    flush::Bool
 end
 
 function Base.show(io::IO, cb::DiscreteCallback{<:Any, <:InfoCallback})
@@ -26,14 +27,24 @@ function Base.show(io::IO, ::MIME"text/plain", cb::DiscreteCallback{<:Any, <:Inf
 end
 
 """
-    InfoCallback()
+    InfoCallback(; interval=0, reset_threads=true, flush=false)
 
 Create and return a callback that prints a human-readable summary of the simulation setup at the
 beginning of a simulation and then resets the timer. When the returned callback is executed
 directly, the current timer values are shown.
+
+# Arguments
+- `interval::Int`: If set to 0 (default), the callback only prints at initialization and
+                   at the end of the simulation. If set to a positive integer, the callback
+                   also prints progress every `interval` time steps.
+- `reset_threads::Bool`: If `true` (default), calls `Polyester.reset_threads!()` during
+                         initialization.
+- `flush::Bool`: If `true` (default: `false`), flushes `stdout` after each output. This is
+                 useful when running on clusters or batch systems where stdout is buffered,
+                 allowing you to monitor progress in real-time.
 """
-function InfoCallback(; interval=0, reset_threads=true)
-    info_callback = InfoCallback(0.0, interval)
+function InfoCallback(; interval=0, reset_threads=true, flush=false)
+    info_callback = InfoCallback(0.0, interval, flush)
 
     function initialize(cb, u, t, integrator)
         initialize_info_callback(cb, u, t, integrator;
@@ -65,6 +76,9 @@ function (info_callback::InfoCallback)(integrator)
                               integrator.stats.naccept, integrator.dt, t,
                               sim_time_percentage), 71) *
                 @sprintf("│ run time: %.4e s", runtime_absolute))
+        if info_callback.flush
+            flush(stdout)
+        end
     end
 
     # This callback only reports progress and does not change the result of the right-hand side.
@@ -143,6 +157,10 @@ function initialize_info_callback(discrete_callback, u, t, integrator;
 
     # Save current time as start_time
     info_callback.start_time = time_ns()
+
+    if info_callback.flush
+        flush(stdout)
+    end
 
     return nothing
 end
