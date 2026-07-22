@@ -40,9 +40,9 @@ directly, the current timer values are shown.
                    also prints progress every `interval` time steps.
 - `reset_threads=true`: If `true`, calls `Polyester.reset_threads!()` during
                          initialization.
-- `flush=false``: If `true`, flushes `stdout` after each output. This is
-                  useful when running on clusters or batch systems where stdout is buffered,
-                  allowing you to monitor progress in real-time.
+- `flush=false`: If `true`, flushes `stdout` after each output. This is
+                 useful when running on clusters or batch systems where stdout is buffered,
+                 allowing you to monitor progress in real-time.
 """
 function InfoCallback(; interval=0, reset_threads=true, flush=false)
     info_callback = InfoCallback(0.0, interval, flush)
