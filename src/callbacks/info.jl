@@ -8,7 +8,7 @@ function Base.show(io::IO, cb::DiscreteCallback{<:Any, <:InfoCallback})
     @nospecialize cb # reduce precompilation time
 
     callback = cb.affect!
-    print(io, "InfoCallback(interval=", callback.interval, ")")
+    print(io, "InfoCallback(interval=", callback.interval, ", flush=$(callback.flush)", ")")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", cb::DiscreteCallback{<:Any, <:InfoCallback})
@@ -20,7 +20,8 @@ function Base.show(io::IO, ::MIME"text/plain", cb::DiscreteCallback{<:Any, <:Inf
         callback = cb.affect!
 
         setup = [
-            "interval" => callback.interval
+            "interval" => callback.interval,
+            "flush" => callback.flush ? "yes" : "no"
         ]
         summary_box(io, "InfoCallback", setup)
     end
@@ -33,15 +34,15 @@ Create and return a callback that prints a human-readable summary of the simulat
 beginning of a simulation and then resets the timer. When the returned callback is executed
 directly, the current timer values are shown.
 
-# Arguments
+# Keywords
 - `interval::Int`: If set to 0 (default), the callback only prints at initialization and
                    at the end of the simulation. If set to a positive integer, the callback
                    also prints progress every `interval` time steps.
 - `reset_threads=true`: If `true`, calls `Polyester.reset_threads!()` during
                          initialization.
-- `flush=false: If `true`, flushes `stdout` after each output. This is
-                 useful when running on clusters or batch systems where stdout is buffered,
-                 allowing you to monitor progress in real-time.
+- `flush=false``: If `true`, flushes `stdout` after each output. This is
+                  useful when running on clusters or batch systems where stdout is buffered,
+                  allowing you to monitor progress in real-time.
 """
 function InfoCallback(; interval=0, reset_threads=true, flush=false)
     info_callback = InfoCallback(0.0, interval, flush)
@@ -76,9 +77,10 @@ function (info_callback::InfoCallback)(integrator)
                               integrator.stats.naccept, integrator.dt, t,
                               sim_time_percentage), 71) *
                 @sprintf("│ run time: %.4e s", runtime_absolute))
-        if info_callback.flush
-            flush(stdout)
-        end
+    end
+
+    if info_callback.flush
+        flush(stdout)
     end
 
     # This callback only reports progress and does not change the result of the right-hand side.
