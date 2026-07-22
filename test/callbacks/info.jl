@@ -14,7 +14,6 @@
         └──────────────────────────────────────────────────────────────────────────────────────────────────┘"""
         @test repr("text/plain", callback) == show_box
 
-
         callback = InfoCallback(interval=11, flush=true)
 
         show_compact = "InfoCallback(interval=11, flush=true)"
